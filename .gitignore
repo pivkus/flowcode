@@ -70,3 +70,6 @@ Testing/
 
 # secrets
 .env
+
+# VSCode
+.vscode/
