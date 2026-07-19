@@ -22,7 +22,10 @@ class Backend {
         ConcurrentQueue<ResponseMessage> response_queue;
     private:
         void networkWorker(std::stop_token stop);
+        void coordinatorWorker(std::stop_token stop);
+
         std::jthread network_thread;
+        std::jthread coordinator_thread;
 
         CURLM *multi;
 

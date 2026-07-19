@@ -16,13 +16,17 @@ Backend::Backend(){
     // jthread prepends stop_token meanining it would call networkWorker(stop_token, this) like this
     // lambda to fix argument order so "this" is first
     network_thread = std::jthread([this](std::stop_token stop){ networkWorker(stop); });
+    coordinator_thread = std::jthread([this](std::stop_token stop){ coordinatorWorker(stop); });
 }
 
 Backend::~Backend(){
     network_thread.request_stop();
+    coordinator_thread.request_stop();
+
     curl_multi_wakeup(multi);
     // jthread would only join in its own destructor, after multi is already cleaned up below
     network_thread.join();
+    coordinator_thread.join();
 
     curl_multi_cleanup(multi);
     curl_global_cleanup();
@@ -83,4 +87,11 @@ void Backend::networkWorker(std::stop_token stop){
         curl_multi_poll(multi, nullptr, 0, 1000, &numfds);
     }
     
+}
+
+void Backend::coordinatorWorker(std::stop_token stop){
+    while (!stop.stop_requested()){
+        std::println("coordinator");
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }
 }
