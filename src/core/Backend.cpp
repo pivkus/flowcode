@@ -5,6 +5,15 @@ Backend::Backend(){
     curl_global_init(CURL_GLOBAL_ALL);
     multi = curl_multi_init();
 
+    fromUIQueue.setCallback([this]{
+        {
+            // hold the lock while setting coord_notified
+            std::lock_guard<std::mutex> lock(coord_mutex);
+            coord_notified = true;
+        }
+        coord_cv.notify_one();
+    });
+
     // TODO: Backend and Bridge have a circular reference with these callbacks, make sure they get deleted in a way
     // so this will no be called on a destroyed object
     request_queue.setCallback([this]{
@@ -91,7 +100,14 @@ void Backend::networkWorker(std::stop_token stop){
 
 void Backend::coordinatorWorker(std::stop_token stop){
     while (!stop.stop_requested()){
-        std::println("coordinator");
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+
+        // periodically sleep, if there is work or stop wakeup
+        std::unique_lock<std::mutex> lock(coord_mutex);
+        // coord_notified predicate to prevent lost wakeups
+        // wait_for unlocks mutex during sleep, re-acquires when awoken
+        coord_cv.wait_for(lock, stop, std::chrono::milliseconds(500), [this]{ return coord_notified; });
+        coord_notified = false;
+        // lock released here
     }
 }
