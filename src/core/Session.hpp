@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <variant>
 
 struct Turn {
     enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
@@ -10,19 +11,49 @@ struct Turn {
     std::string content;
 };
 
-class Session{
-    
+using TurnPtr = std::shared_ptr<const Turn>;
+using TurnVec = std::vector<TurnPtr>;
+
+enum class TokensType{OUTPUT, REASONING};
+
+
+
+// Effects
+struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot; };
+struct EmitOutput { uint64_t sid; std::string content; };
+struct EmitReasoning { uint64_t sid; std::string content; };
+struct TurnFinished { uint64_t sid; };
+struct EffectNone { }; 
+
+using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished>;
+
+class Session {
+
     public:
-        using TurnPtr = std::shared_ptr<const Turn>;
-        using TurnVec = std::vector<TurnPtr>;
-    
+
         Session(uint64_t id);
-        void appendUserTurn(std::string content);
-        void finishAssistantTurn();
+
+        // Commands from the UI
+        Effect submitUserTurn(std::string content);
+    
+        // Events from the network
+        Effect onTextDelta(std::string tokens, TokensType type);
+        Effect onTurnComplete();
+        Effect onRequestFailed();
+
+        std::shared_ptr<TurnVec> snapshotHistory() const;
 
         uint64_t session_id;
-        // TODO: I dont like history being public, right now its just simpler
-        // investigate moving to private
+
+    private:
+
+        struct AwaitingModelData {
+            uint64_t turn_id;
+            std::string incoming;
+        };
+
+        enum class State {IDLE, AWAITING_MODEL};
+        State state = State::IDLE;
+        std::variant<std::monostate, AwaitingModelData> state_data;
         TurnVec history;
-        std::string incomming;
 };

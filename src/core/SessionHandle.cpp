@@ -106,7 +106,7 @@ size_t SessionHandle::writeback(const char* data, size_t len){
     return len;
 }
 
-void SessionHandle::serializeTurnsToJSON(const Session::TurnVec& turns) {
+void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
     static constexpr auto roleStr = [](Turn::Role role) -> std::string_view {
         switch (role) {
             case Turn::Role::USER:      return "user";

@@ -31,6 +31,7 @@ class Backend {
         std::mutex coord_mutex;
         bool coord_notified = false;
         std::condition_variable_any coord_cv;
+        void executeEffect(Effect&& e);
 
         ConcurrentQueue<toNetworkMessage> toNetworkQueue;
         ConcurrentQueue<fromNetworkMessage> fromNetworkQueue;

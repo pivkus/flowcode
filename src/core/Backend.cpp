@@ -102,6 +102,40 @@ void Backend::networkWorker(std::stop_token stop){
     
 }
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+void Backend::executeEffect(Effect&& e){
+    std::visit(overloaded{
+        [&](SendRequest& r){
+            toNetworkQueue.enqueue({
+                .session_id = r.sid, 
+                .turns = std::move(r.snapshot) 
+            });
+        },
+        [&](EmitOutput& o){
+            toUIQueue.enqueue({
+                .session_id = o.sid,
+                .kind = toUIMessage::Kind::OUTPUT_TOKENS,
+                .content = std::move(o.content)
+            });
+        },
+        [&](EmitReasoning& r){
+            toUIQueue.enqueue({
+                .session_id = r.sid,
+                .kind = toUIMessage::Kind::REASONING_TOKENS,
+                .content = std::move(r.content)
+            });
+        },
+        [&](TurnFinished& t){
+            toUIQueue.enqueue({
+                .session_id = t.sid,
+                .kind = toUIMessage::Kind::TURN_FINISHED,
+                .content = ""
+            });
+        },
+        [&](EffectNone& e){},
+    }, e);
+}
+
 void Backend::coordinatorWorker(std::stop_token stop){
     std::unordered_map<uint64_t, Session> sessions;
 
@@ -114,64 +148,41 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 
                 case CREATE_SESSION:
                     sessions.try_emplace(msg->session_id, msg->session_id);
-                    std::println("session created id: {}", msg->session_id);
                     break;
-                case PROMPT_SUBMITED:
-
+                case PROMPT_SUBMITED: {
                     Session& s = sessions.at(msg->session_id);
-                    s.appendUserTurn(std::move(msg->content));
-                    // does a copy of the pointers to TurnPtr vector creating a snapshot of the conversation
-                    auto snapshot = make_shared<Session::TurnVec>(s.history);
-
-                    // Route to network thread
-                    toNetworkQueue.enqueue({
-                        .session_id = msg->session_id,
-                        .turns = snapshot
-                    });
-
-                    std::println("prompt submited {}", msg->session_id);
+                    Effect effect = s.submitUserTurn(std::move(msg->content));
+                    executeEffect(std::move(effect));
                     break;
+                }
             }
         }
 
         while (auto msg = fromNetworkQueue.dequeue()){
             Session& s = sessions.at(msg->session_id);
-            // TODO: a lot of repetition in here 
+            Effect effect;
+
             switch (msg->kind){
     
-                case fromNetworkMessage::Kind::OUTPUT_TOKENS:
-                    s.incomming.append(msg->content);
-                    toUIQueue.enqueue({
-                        .session_id = msg->session_id,
-                        .kind = toUIMessage::Kind::OUTPUT_TOKENS,
-                        .content = std::move(msg->content)
-                    });
+                case fromNetworkMessage::Kind::OUTPUT_TOKENS: 
+                    effect = s.onTextDelta(std::move(msg->content), TokensType::OUTPUT);
                     break;
-                case fromNetworkMessage::Kind::REASONING_TOKENS:
-                    // reasoning tokens arent stored yet, because they are not usually added to the conversation history i think
-                    toUIQueue.enqueue({
-                        .session_id = msg->session_id,
-                        .kind = toUIMessage::Kind::REASONING_TOKENS,
-                        .content = std::move(msg->content)
-                    });
+                
+                case fromNetworkMessage::Kind::REASONING_TOKENS: 
+                    effect = s.onTextDelta(std::move(msg->content), TokensType::REASONING);
                     break;
-                case fromNetworkMessage::Kind::TURN_FINISHED:
-                    s.finishAssistantTurn();
-                    toUIQueue.enqueue({
-                        .session_id = msg->session_id,
-                        .kind = toUIMessage::Kind::TURN_FINISHED,
-                        .content = ""
-                    });
+                
+                case fromNetworkMessage::Kind::TURN_FINISHED: 
+                    effect = s.onTurnComplete();
                     break;
-                case fromNetworkMessage::Kind::ERROR:
-                    // TODO: leave the session history in a good state, maybe clear the user prompt etc.
-                    s.incomming.clear();
-                    toUIQueue.enqueue({
-                        .session_id = msg->session_id,
-                        .kind = toUIMessage::Kind::ERROR,
-                        .content = std::move(msg->content)
-                    });
+                
+                case fromNetworkMessage::Kind::ERROR: 
+                    effect = s.onRequestFailed();
+                    break;
+                
             }
+
+            executeEffect(std::move(effect));
         }
 
 
