@@ -24,3 +24,16 @@ void Session::appendUserTurn(std::string content) {
     });
     history.push_back(std::move(turn));
 }
+
+void Session::finishAssistantTurn(){
+    using enum Turn::Role;
+
+    TurnPtr turn = std::make_shared<Turn>(Turn{
+        .turn_id = static_cast<uint64_t>(history.size()),
+        .role = ASSISTANT,
+        .content = std::move(incomming)
+    });
+
+    incomming.clear();
+    history.push_back(std::move(turn));
+}

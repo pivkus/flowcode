@@ -8,8 +8,7 @@
 #include <json.hpp>
 
 #include "ConcurrentQueue.hpp"
-#include "Backend.hpp"
-#include "Session.hpp"
+#include "Messages.hpp"
 
 
 class SessionHandle {
@@ -33,7 +32,7 @@ class SessionHandle {
 
     private:
         using json = nlohmann::json;
-        using enum fromNetworkMessage::Kind
+        using enum fromNetworkMessage::Kind;
 
         static size_t writeTrampoline(char* p, size_t sz, size_t n, void* userdata);
         size_t writeback(const char* data, size_t len);

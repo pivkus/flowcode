@@ -17,11 +17,12 @@ class Session{
         using TurnVec = std::vector<TurnPtr>;
     
         Session(uint64_t id);
-
         void appendUserTurn(std::string content);
+        void finishAssistantTurn();
 
         uint64_t session_id;
         // TODO: I dont like history being public, right now its just simpler
         // investigate moving to private
         TurnVec history;
+        std::string incomming;
 };
