@@ -99,8 +99,36 @@ void Backend::networkWorker(std::stop_token stop){
 }
 
 void Backend::coordinatorWorker(std::stop_token stop){
+    std::unordered_map<uint64_t, Session> sessions;
+
     while (!stop.stop_requested()){
 
+
+        while (auto msg = fromUIQueue.dequeue()){
+            switch (msg->kind){
+                using enum fromUIMessage::Kind;
+                
+                case CREATE_SESSION:
+                    sessions.try_emplace(msg->session_id, msg->session_id);
+                    std::println("session created id: {}", msg->session_id);
+                    break;
+                case PROMPT_SUBMITED:
+
+                    Session& s = sessions.at(msg->session_id);
+                    s.appendUserTurn(std::move(msg->content));
+                    // does a copy of the pointers to TurnPtr vector creating a snapshot of the conversation
+                    auto snapshot = make_shared<std::vector<Session::TurnPtr>>(s.history);
+
+                    // Route to network thread
+                    toNetworkQueue.enqueue({
+                        .session_id = msg->session_id,
+                        .turns = snapshot
+                    });
+
+                    std::println("prompt submited {}", msg->session_id);
+                    break;
+            }
+        }
 
         // periodically sleep, if there is work or stop wakeup
         std::unique_lock<std::mutex> lock(coord_mutex);

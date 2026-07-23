@@ -18,7 +18,7 @@ class SessionWidget : public QWidget {
     signals:
         void userPromptSent(uint64_t id, const QString &content);
     private slots:
-        void promptSubmitted();
+        void submitPrompt();
     private:
         uint64_t id;
         bool active_response = false;

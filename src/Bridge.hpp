@@ -18,7 +18,8 @@ class Bridge : public QObject {
         void responseError(uint64_t id, const QString &content);
 
     public slots:
-        void userPrompt(uint64_t id, const QString &content);
+        void userPromptSent(uint64_t id, const QString &content);
+        void sessionCreated(uint64_t id);
     private:
         void drainMessages();
 

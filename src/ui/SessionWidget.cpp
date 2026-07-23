@@ -1,4 +1,4 @@
-#include "Session.hpp"
+#include "SessionWidget.hpp"
 
 #include <QVBoxLayout>
 
@@ -17,7 +17,7 @@ SessionWidget::SessionWidget(uint64_t id, QWidget *parent)
 
     setLayout(layout);
 
-    connect(input, &QLineEdit::returnPressed, this, &SessionWidget::promptSubmitted);
+    connect(input, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
 
 }
 
@@ -34,7 +34,7 @@ void SessionWidget::reportError(const QString &content){
     active_response = false;
 }
 
-void SessionWidget::promptSubmitted(){
+void SessionWidget::submitPrompt(){
     if (active_response) return;
     active_response = true;
 
@@ -56,7 +56,7 @@ SessionWidget* SessionManager::createSession(uint64_t id){
     SessionWidget *w = new SessionWidget(id);
     sessions.insert(id, w);
 
-    connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPrompt);
+    connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPromptSent);
     // Widget will be removed from map automatically
     connect(w, &QObject::destroyed, this, [this, id]{
         sessions.remove(id);

@@ -8,6 +8,7 @@
 
 #include "ConcurrentQueue.hpp"
 #include "SessionHandle.hpp"
+#include "Session.hpp"
 
 struct toUIMessage{
     enum class Kind {
@@ -35,6 +36,14 @@ struct fromUIMessage{
     std::string content;
 };
 
+struct toNetworkMessage {
+    using TurnVec = std::vector<Session::TurnPtr>;
+
+    uint64_t session_id;
+    // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
+    std::shared_ptr<TurnVec> turns;
+};
+
 class Backend {
     public:
         Backend();
@@ -60,6 +69,7 @@ class Backend {
         bool coord_notified = false;
         std::condition_variable_any coord_cv;
 
+        ConcurrentQueue<toNetworkMessage> toNetworkQueue;
 
         CURLM *multi;
 
