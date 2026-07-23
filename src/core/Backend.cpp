@@ -41,34 +41,93 @@ Backend::~Backend(){
     curl_global_cleanup();
 }
 
+// void Backend::networkWorker(std::stop_token stop){
+//     // TODO: this will keep accummulating handles, manage this once I add persistant session storage
+//     std::unordered_map<uint64_t, std::unique_ptr<SessionHandle>> se_map;
+
+//     int still_running = 0;
+//     while (!stop.stop_requested()){
+
+//         while (auto req = request_queue.dequeue()){
+//             // Will insert a null unique_ptr if id not in map
+//             std::unique_ptr<SessionHandle>& slot = se_map[req->id];
+//             if (!slot){
+//                 try {
+//                     slot = std::make_unique<SessionHandle>(req->id, &response_queue);
+//                 } catch (const std::exception &e){
+//                     // e.g. missing API key; report to the UI instead of crashing the worker
+//                     response_queue.enqueue({
+//                         .id = req->id,
+//                         .kind = ResponseMessage::Kind::RESPONSE_ERROR,
+//                         .content = e.what()
+//                     });
+//                     se_map.erase(req->id);
+//                     continue;
+//                 }
+//             }
+
+//             SessionHandle& session = *slot;
+//             session.prepareMessage(std::move(req->content));
+//             curl_multi_add_handle(multi, session.raw());
+//         }
+
+//         curl_multi_perform(multi, &still_running);
+
+//         CURLMsg *m;
+//         int left;
+//         while ((m = curl_multi_info_read(multi, &left))){
+//             void *s_ptr;
+//             curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &s_ptr);
+//             SessionHandle& session = *static_cast<SessionHandle* >(s_ptr); // make sure this will always be valid
+
+//             // data.result is only valid when msg == CURLMSG_DONE
+//             if (m->msg == CURLMSG_DONE){
+//                 if (m->data.result != CURLE_OK){
+//                     session.sendError(curl_easy_strerror(m->data.result));
+//                 } else {
+//                     session.completeMessage();
+//                 }
+//                 curl_multi_remove_handle(multi, session.raw());
+//             }
+//         }
+
+//         // will wait if there are no active handles or until wakeup
+//         int numfds = 0;
+//         curl_multi_poll(multi, nullptr, 0, 1000, &numfds);
+//     }
+    
+// }
+
 void Backend::networkWorker(std::stop_token stop){
-    // TODO: this will keep accummulating handles, manage this once I add persistant session storage
-    std::unordered_map<uint64_t, std::unique_ptr<SessionHandle>> se_map;
+    // TODO: this will keep accummulating connections, manage this once I add persistant session storage
+    std::unordered_map<uint64_t, std::unique_ptr<SessionHandle>> se_cache;
 
     int still_running = 0;
     while (!stop.stop_requested()){
 
-        while (auto req = request_queue.dequeue()){
+        while (auto req = toNetworkQueue.dequeue()){
             // Will insert a null unique_ptr if id not in map
-            std::unique_ptr<SessionHandle>& slot = se_map[req->id];
+            std::unique_ptr<SessionHandle>& slot = se_cache[req->session_id];
             if (!slot){
                 try {
-                    slot = std::make_unique<SessionHandle>(req->id, &response_queue);
+                    slot = std::make_unique<SessionHandle>(req->session_id, &fromNetworkQueue);
                 } catch (const std::exception &e){
                     // e.g. missing API key; report to the UI instead of crashing the worker
-                    response_queue.enqueue({
-                        .id = req->id,
-                        .kind = ResponseMessage::Kind::RESPONSE_ERROR,
+                    using enum fromNetworkMessage::Kind;
+
+                    fromNetworkQueue.enqueue({
+                        .session_id = req->session_id,
+                        .kind = ERROR,
                         .content = e.what()
                     });
-                    se_map.erase(req->id);
+                    se_cache.erase(req->session_id);
                     continue;
                 }
             }
 
-            SessionHandle& session = *slot;
-            session.prepareMessage(std::move(req->content));
-            curl_multi_add_handle(multi, session.raw());
+            SessionHandle& connection = *slot;
+            connection.prepareMessage(*req);
+            curl_multi_add_handle(multi, connection.raw());
         }
 
         curl_multi_perform(multi, &still_running);
@@ -117,7 +176,7 @@ void Backend::coordinatorWorker(std::stop_token stop){
                     Session& s = sessions.at(msg->session_id);
                     s.appendUserTurn(std::move(msg->content));
                     // does a copy of the pointers to TurnPtr vector creating a snapshot of the conversation
-                    auto snapshot = make_shared<std::vector<Session::TurnPtr>>(s.history);
+                    auto snapshot = make_shared<Session::TurnVec>(s.history);
 
                     // Route to network thread
                     toNetworkQueue.enqueue({

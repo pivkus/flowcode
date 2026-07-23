@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 
-SessionHandle::SessionHandle(uint64_t id, ConcurrentQueue<ResponseMessage> *queue)
+SessionHandle::SessionHandle(uint64_t id, ConcurrentQueue<fromNetworkMessage> *queue)
 : session_id(id), out_queue(queue)
 {
 
@@ -42,9 +42,9 @@ SessionHandle::~SessionHandle(){
 }
 
 void SessionHandle::sendError(std::string errmsg){
-    ResponseMessage resp {
-        .id = session_id,
-        .kind = ResponseMessage::Kind::RESPONSE_ERROR,
+    fromNetworkMessage resp {
+        .session_id = session_id,
+        .kind = ERROR,
         .content = std::move(errmsg)
     };
 
@@ -52,38 +52,36 @@ void SessionHandle::sendError(std::string errmsg){
 }
 
 
-void SessionHandle::prepareMessage(std::string userprompt){
-    // Clear any leftovers from a previous request that ended in an error
-    chunks_buffer.clear();
-    incomming_response.clear();
-    incomming_reasoning.clear();
+void SessionHandle::prepareMessage(toNetworkMessage& request){
 
-    json_payload["messages"].push_back({
-        {"role", "user"},
-        {"content", std::move(userprompt)}
-    });
+
+    // TODO: these thing should be passed in the request
+    json_payload["model"] = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+    json_payload["stream"] = true;
+    json_payload["messages"] = json::array();
+    json_payload["reasoning"] = { {"enabled", true} };
+
+    serializeTurnsToJSON(*request.turns);
 
     str_payload = json_payload.dump();
     curl_easy_setopt(handle, CURLOPT_POSTFIELDS, str_payload.c_str()); // str_payload needs to live until request finishes, doesnt copy
 }
 
 void SessionHandle::completeMessage(){
+
+    // handle remaining chunk that might be present
     if (chunks_buffer.length() > 0){
         handleEvent(chunks_buffer);
     }
 
-    json_payload["messages"].push_back({
-        {"role", "assistant"},
-        {"content", std::move(incomming_response)} // also leaves it empty for the next response
-    });
 
-    ResponseMessage done_message {
-        .id = session_id,
-        .kind = ResponseMessage::Kind::RESPONSE_END,
+    fromNetworkMessage done_msg {
+        .session_id = session_id,
+        .kind = TURN_FINISHED,
         .content = ""
     };
 
-    out_queue->enqueue(std::move(done_message));
+    out_queue->enqueue(std::move(done_msg));
 }
 
 CURL *SessionHandle::raw(){ return handle; }
@@ -108,6 +106,25 @@ size_t SessionHandle::writeback(const char* data, size_t len){
     return len;
 }
 
+void SessionHandle::serializeTurnsToJSON(const Session::TurnVec& turns) {
+    static constexpr auto roleStr = [](Turn::Role role) -> std::string_view {
+        switch (role) {
+            case Turn::Role::USER:      return "user";
+            case Turn::Role::ASSISTANT: return "assistant";
+            case Turn::Role::SYSTEM:    return "system";
+            case Turn::Role::TOOL:      return "tool";
+        }
+        return "user";
+    };
+
+    for (const auto& turn : turns) {
+        json_payload["messages"].push_back({
+            {"role",    roleStr(turn->role)},
+            {"content", turn->content}
+        });
+    }
+}
+
 void SessionHandle::handleEvent(std::string_view event){
 
     if (event.starts_with(":")){
@@ -121,7 +138,7 @@ void SessionHandle::handleEvent(std::string_view event){
     } else {
         if (event.compare("data: [DONE]") == 0) return;
     
-        event.remove_prefix(6); // len of data: prefix is 6
+        event.remove_prefix(6); // len of "data: " prefix is 6
         json parsed = json::parse(event, nullptr, false);
 
         if (parsed.is_discarded()){
@@ -144,11 +161,10 @@ void SessionHandle::handleEvent(std::string_view event){
 
         if (content_it != delta_it->end() && content_it->is_string()){
             std::string tokens = std::move(content_it->get_ref<std::string&>());
-            incomming_response.append(tokens);
 
-            ResponseMessage resp {
-                .id = session_id,
-                .kind = ResponseMessage::Kind::OUTPUT_TOKENS,
+            fromNetworkMessage resp {
+                .session_id = session_id,
+                .kind = OUTPUT_TOKENS,
                 .content = std::move(tokens)
             };
 
@@ -162,11 +178,10 @@ void SessionHandle::handleEvent(std::string_view event){
 
             // TODO: can one chunk have both content and reasoning? if no this can be simplified
             std::string tokens = std::move(reasoning_it->get_ref<std::string&>());
-            incomming_reasoning.append(tokens);
 
-            ResponseMessage resp {
-                .id = session_id,
-                .kind = ResponseMessage::Kind::REASONING_TOKENS,
+            fromNetworkMessage resp {
+                .session_id = session_id,
+                .kind = REASONING_TOKENS,
                 .content = std::move(tokens)
             };
 

@@ -37,11 +37,24 @@ struct fromUIMessage{
 };
 
 struct toNetworkMessage {
-    using TurnVec = std::vector<Session::TurnPtr>;
 
     uint64_t session_id;
     // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
-    std::shared_ptr<TurnVec> turns;
+    std::shared_ptr<Session::TurnVec> turns;
+};
+
+// TODO: this is simmilar to toUIMessage, maybe consider merging the types
+struct fromNetworkMessage {
+    enum class Kind {
+        OUTPUT_TOKENS,
+        REASONING_TOKENS,
+        TURN_FINISHED,
+        ERROR
+    };
+
+    uint64_t session_id;
+    Kind kind;
+    std::string content;
 };
 
 class Backend {
@@ -55,8 +68,6 @@ class Backend {
         ConcurrentQueue<fromUIMessage> fromUIQueue;
         ConcurrentQueue<toUIMessage> toUIQueue;
 
-        ConcurrentQueue<RequestMessage> request_queue;
-        ConcurrentQueue<ResponseMessage> response_queue;
 
     private:
         void networkWorker(std::stop_token stop);
@@ -70,6 +81,7 @@ class Backend {
         std::condition_variable_any coord_cv;
 
         ConcurrentQueue<toNetworkMessage> toNetworkQueue;
+        ConcurrentQueue<fromNetworkMessage> fromNetworkQueue;
 
         CURLM *multi;
 

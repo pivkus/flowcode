@@ -13,7 +13,8 @@ struct Turn {
 class Session{
     
     public:
-        using TurnPtr = std::shared_ptr<const Turn>; 
+        using TurnPtr = std::shared_ptr<const Turn>;
+        using TurnVec = std::vector<TurnPtr>;
     
         Session(uint64_t id);
 
@@ -22,5 +23,5 @@ class Session{
         uint64_t session_id;
         // TODO: I dont like history being public, right now its just simpler
         // investigate moving to private
-        std::vector<TurnPtr> history;
+        TurnVec history;
 };
