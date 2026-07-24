@@ -1,7 +1,7 @@
 #include "Session.hpp"
 
-Session::Session(uint64_t id)
-: session_id(id)
+Session::Session(uint64_t id, std::vector<SchemaPtr> allowed_tools)
+: session_id(id), tools(allowed_tools)
 {
     using enum Turn::Role;
 
@@ -12,6 +12,7 @@ Session::Session(uint64_t id)
     });
 
     history.push_back(std::move(sys));
+
 }
 
 std::shared_ptr<TurnVec> Session::snapshotHistory() const {

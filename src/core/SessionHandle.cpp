@@ -63,7 +63,8 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
 
     serializeTurnsToJSON(*request.turns);
 
-    str_payload = json_payload.dump();
+    str_payload = json_payload.dump(4);
+    std::println("{}", str_payload);
     curl_easy_setopt(handle, CURLOPT_POSTFIELDS, str_payload.c_str()); // str_payload needs to live until request finishes, doesnt copy
 }
 

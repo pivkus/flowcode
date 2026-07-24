@@ -30,7 +30,6 @@ void Bridge::drainMessages(){
             // TODO: separate output/reasoning
             case toUIMessage::Kind::OUTPUT_TOKENS:
             case toUIMessage::Kind::REASONING_TOKENS:
-                std::println("Received message {}", msg->content);
                 emit tokensReceived(msg->session_id, QString::fromStdString(msg->content));
 
             // TODO: implement

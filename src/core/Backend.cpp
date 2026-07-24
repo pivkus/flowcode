@@ -102,6 +102,66 @@ void Backend::networkWorker(std::stop_token stop){
     
 }
 
+std::string_view ToolRegistry::toJSONType(ToolParamType type){
+    switch (type) {
+        case ToolParamType::String:      return "string";
+        case ToolParamType::Integer:     return "integer";
+        case ToolParamType::Number:      return "number";
+        case ToolParamType::Boolean:     return "boolean";
+        case ToolParamType::StringArray: return "array";
+    }
+    return "string"; // unreachable; silences -Wreturn-type
+}
+
+json ToolRegistry::buildJSONSchema(const ToolSchema& schema){
+    json properties = json::object();
+    json required = json::array();
+
+    for (const ToolParam& prop : schema.params){
+
+        if (prop.type == ToolParamType::StringArray){
+            properties[prop.name] = {
+                {"type", "array"},
+                {"items", {{"type", "string"}}},
+                {"description", prop.description}
+            };
+        } else {
+            properties[prop.name] = {
+                {"type", toJSONType(prop.type)},
+                {"description", prop.description}
+            };
+        }
+
+        if (!prop.allowed_vals.empty()) properties[prop.name]["enum"] = prop.allowed_vals;
+        if (prop.required) required.push_back(prop.name);
+
+    }
+
+    return {
+        {"type", "function"},
+        {"function", {
+            {"name", schema.name},
+            {"description", schema.description},
+            {"parameters", {
+                {"type", "object"},
+                {"properties", std::move(properties)}
+            }},
+            {"required", std::move(required)}
+        }}
+    };
+}
+
+void ToolRegistry::registerTool(ToolSchema schema){
+    schema.cached = buildJSONSchema(schema);
+    auto ptr = std::make_shared<const ToolSchema>(std::move(schema));
+    registry[ptr->name] = std::move(ptr);
+}
+
+SchemaPtr ToolRegistry::get(std::string_view key){
+    if (auto it = registry.find(key); it != registry.end()) return it->second;
+    return nullptr;
+}
+
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 void Backend::executeEffect(Effect&& e){
     std::visit(overloaded{
@@ -137,8 +197,27 @@ void Backend::executeEffect(Effect&& e){
 }
 
 void Backend::coordinatorWorker(std::stop_token stop){
-    std::unordered_map<uint64_t, Session> sessions;
 
+    // Register all tools in a global registry before starting - converts to json object here as well
+    ToolRegistry reg;
+    reg.registerTool(ToolSchema {
+        .name = "bash",
+        .description = "Run a bash command and return its output.",
+        .params = {
+            {
+                .name = "command", 
+                .description = "The bash command to execute.", 
+                .type = ToolParamType::String,
+                .required = true
+            }
+        }
+    });
+
+    // TODO: this is just a temporary for testing, each session should have its own way to configure allowed tools
+    std::vector<SchemaPtr> allowed_tools;
+    allowed_tools.push_back(reg.get("bash"));
+
+    std::unordered_map<uint64_t, Session> sessions;
     while (!stop.stop_requested()){
 
 
@@ -147,7 +226,7 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 using enum fromUIMessage::Kind;
                 
                 case CREATE_SESSION:
-                    sessions.try_emplace(msg->session_id, msg->session_id);
+                    sessions.try_emplace(msg->session_id, msg->session_id, allowed_tools);
                     break;
                 case PROMPT_SUBMITED: {
                     Session& s = sessions.at(msg->session_id);

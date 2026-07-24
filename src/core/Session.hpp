@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <print>
 #include <variant>
 
 struct Turn {
@@ -13,6 +14,9 @@ struct Turn {
 
 using TurnPtr = std::shared_ptr<const Turn>;
 using TurnVec = std::vector<TurnPtr>;
+
+struct ToolSchema; // defined in Backend.hpp
+using SchemaPtr = std::shared_ptr<const ToolSchema>;
 
 enum class TokensType{OUTPUT, REASONING};
 
@@ -31,7 +35,8 @@ class Session {
 
     public:
 
-        Session(uint64_t id);
+        Session(uint64_t id, std::vector<SchemaPtr> allowed_tools);
+        // Session(uint64_t id);
 
         // Commands from the UI
         Effect submitUserTurn(std::string content);
@@ -56,4 +61,5 @@ class Session {
         State state = State::IDLE;
         std::variant<std::monostate, AwaitingModelData> state_data;
         TurnVec history;
+        std::vector<SchemaPtr> tools;
 };
