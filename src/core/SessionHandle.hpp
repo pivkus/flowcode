@@ -4,12 +4,14 @@
 #include <string>
 #include <string_view>
 #include <curl/curl.h>
+#include <map>
 
 #include <json.hpp>
 
 #include "ConcurrentQueue.hpp"
 #include "Messages.hpp"
 
+using json = nlohmann::json;
 
 class SessionHandle {
     public:
@@ -31,15 +33,15 @@ class SessionHandle {
         uint64_t id();
 
     private:
-        using json = nlohmann::json;
         using enum fromNetworkMessage::Kind;
 
         static size_t writeTrampoline(char* p, size_t sz, size_t n, void* userdata);
         size_t writeback(const char* data, size_t len);
         void handleEvent(std::string_view event);
+    
         void serializeTurnsToJSON(const TurnVec& turns);
-
-
+        static std::string_view toJSONType(ToolParamType type);
+        json buildJSONSchema(const ToolSchema& schema);
 
         CURL *handle;
         struct curl_slist *headers;
@@ -51,4 +53,20 @@ class SessionHandle {
 
         uint64_t session_id;
         ConcurrentQueue<fromNetworkMessage> *out_queue;
+
+        // State for collecting incomming tool_call chunks
+        struct ToolSlot {
+            std::string id;
+            std::string name;
+            std::string args;
+        };
+
+        std::map<int, ToolSlot, std::less<>> tc_incomming;
+
+        // State for response termination
+        std::string finish_reason;
+        std::string native_finish_reason;
+        bool saw_done; // "data: [DONE]"" was emitted
+
+        
 };

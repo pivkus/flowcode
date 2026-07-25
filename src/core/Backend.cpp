@@ -102,73 +102,14 @@ void Backend::networkWorker(std::stop_token stop){
     
 }
 
-std::string_view ToolRegistry::toJSONType(ToolParamType type){
-    switch (type) {
-        case ToolParamType::String:      return "string";
-        case ToolParamType::Integer:     return "integer";
-        case ToolParamType::Number:      return "number";
-        case ToolParamType::Boolean:     return "boolean";
-        case ToolParamType::StringArray: return "array";
-    }
-    return "string"; // unreachable; silences -Wreturn-type
-}
-
-json ToolRegistry::buildJSONSchema(const ToolSchema& schema){
-    json properties = json::object();
-    json required = json::array();
-
-    for (const ToolParam& prop : schema.params){
-
-        if (prop.type == ToolParamType::StringArray){
-            properties[prop.name] = {
-                {"type", "array"},
-                {"items", {{"type", "string"}}},
-                {"description", prop.description}
-            };
-        } else {
-            properties[prop.name] = {
-                {"type", toJSONType(prop.type)},
-                {"description", prop.description}
-            };
-        }
-
-        if (!prop.allowed_vals.empty()) properties[prop.name]["enum"] = prop.allowed_vals;
-        if (prop.required) required.push_back(prop.name);
-
-    }
-
-    return {
-        {"type", "function"},
-        {"function", {
-            {"name", schema.name},
-            {"description", schema.description},
-            {"parameters", {
-                {"type", "object"},
-                {"properties", std::move(properties)}
-            }},
-            {"required", std::move(required)}
-        }}
-    };
-}
-
-void ToolRegistry::registerTool(ToolSchema schema){
-    schema.cached = buildJSONSchema(schema);
-    auto ptr = std::make_shared<const ToolSchema>(std::move(schema));
-    registry[ptr->name] = std::move(ptr);
-}
-
-SchemaPtr ToolRegistry::get(std::string_view key){
-    if (auto it = registry.find(key); it != registry.end()) return it->second;
-    return nullptr;
-}
-
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 void Backend::executeEffect(Effect&& e){
     std::visit(overloaded{
         [&](SendRequest& r){
             toNetworkQueue.enqueue({
                 .session_id = r.sid, 
-                .turns = std::move(r.snapshot) 
+                .turns = std::move(r.snapshot),
+                .tools = std::move(r.tools) 
             });
         },
         [&](EmitOutput& o){
@@ -243,22 +184,24 @@ void Backend::coordinatorWorker(std::stop_token stop){
 
             switch (msg->kind){
     
-                case fromNetworkMessage::Kind::OUTPUT_TOKENS: 
-                    effect = s.onTextDelta(std::move(msg->content), TokensType::OUTPUT);
+                case fromNetworkMessage::Kind::OUTPUT_TOKENS: {
+                    auto content = std::get<std::string>(msg->content);
+                    effect = s.onTextDelta(std::move(content), TokensType::OUTPUT);
                     break;
-                
-                case fromNetworkMessage::Kind::REASONING_TOKENS: 
-                    effect = s.onTextDelta(std::move(msg->content), TokensType::REASONING);
+                }
+                case fromNetworkMessage::Kind::REASONING_TOKENS: {
+                    auto content = std::get<std::string>(msg->content); 
+                    effect = s.onTextDelta(std::move(content), TokensType::REASONING);
                     break;
-                
-                case fromNetworkMessage::Kind::TURN_FINISHED: 
+                }
+                case fromNetworkMessage::Kind::TURN_FINISHED: {
                     effect = s.onTurnComplete();
                     break;
-                
-                case fromNetworkMessage::Kind::ERROR: 
+                }
+                case fromNetworkMessage::Kind::ERROR: {
                     effect = s.onRequestFailed();
                     break;
-                
+                }
             }
 
             executeEffect(std::move(effect));

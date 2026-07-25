@@ -5,6 +5,8 @@
 #include <print>
 #include <variant>
 
+#include "Tools.hpp"
+
 struct Turn {
     enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
     uint64_t turn_id;
@@ -15,15 +17,12 @@ struct Turn {
 using TurnPtr = std::shared_ptr<const Turn>;
 using TurnVec = std::vector<TurnPtr>;
 
-struct ToolSchema; // defined in Backend.hpp
-using SchemaPtr = std::shared_ptr<const ToolSchema>;
-
 enum class TokensType{OUTPUT, REASONING};
 
 
 
 // Effects
-struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot; };
+struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  std::vector<SchemaPtr> tools; };
 struct EmitOutput { uint64_t sid; std::string content; };
 struct EmitReasoning { uint64_t sid; std::string content; };
 struct TurnFinished { uint64_t sid; };
@@ -36,7 +35,6 @@ class Session {
     public:
 
         Session(uint64_t id, std::vector<SchemaPtr> allowed_tools);
-        // Session(uint64_t id);
 
         // Commands from the UI
         Effect submitUserTurn(std::string content);

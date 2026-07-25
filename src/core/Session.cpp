@@ -39,7 +39,11 @@ Effect Session::submitUserTurn(std::string content) {
         .incoming = ""
     };
 
-    return SendRequest{ .sid = session_id, .snapshot = snapshotHistory() };
+    return SendRequest{ 
+        .sid = session_id, 
+        .snapshot = snapshotHistory(),
+        .tools = tools
+    };
 }
 
 Effect Session::onTextDelta(std::string tokens, TokensType type){
@@ -78,6 +82,7 @@ Effect Session::onTurnComplete(){
     return TurnFinished{ .sid = session_id };
 }
 
+// TODO: distinquish different errors and support re-trying
 Effect Session::onRequestFailed(){
     if (state != State::AWAITING_MODEL) return EffectNone{};
 

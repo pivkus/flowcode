@@ -1,9 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <memory>
+#include <variant>
 #include <string>
 
 #include "Session.hpp"
+#include "Tools.hpp"
 
 struct toUIMessage {
     enum class Kind {
@@ -35,9 +37,9 @@ struct toNetworkMessage {
     uint64_t session_id;
     // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
     std::shared_ptr<TurnVec> turns;
+    std::vector<SchemaPtr> tools;
 };
 
-// TODO: this is simmilar to toUIMessage, maybe consider merging the types
 struct fromNetworkMessage {
     enum class Kind {
         OUTPUT_TOKENS,
@@ -48,5 +50,5 @@ struct fromNetworkMessage {
 
     uint64_t session_id;
     Kind kind;
-    std::string content;
+    std::variant<std::string, ToolCallRequest> content;
 };
