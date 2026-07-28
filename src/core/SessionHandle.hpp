@@ -43,6 +43,7 @@ class SessionHandle {
         static std::string_view toJSONType(ToolParamType type);
         json buildJSONSchema(const ToolSchema& schema);
 
+
         CURL *handle;
         struct curl_slist *headers;
 
@@ -60,8 +61,8 @@ class SessionHandle {
             std::string name;
             std::string args;
         };
-
         std::map<int, ToolSlot, std::less<>> tc_incomming;
+        SchemaMap tool_schemas;
 
         // State for response termination
         std::string finish_reason;

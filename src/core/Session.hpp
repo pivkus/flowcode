@@ -7,42 +7,66 @@
 
 #include "Tools.hpp"
 
+// Helper to build a visitor out of lambdas for std::visit
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+
+struct AssistantContent { std::string text; ToolCallRequests tool_calls; };
+struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
+
+using TurnContent = std::variant<std::string, AssistantContent, ToolResultContent>;
+
 struct Turn {
     enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
     uint64_t turn_id;
     Role role;
-    std::string content;
+    TurnContent content;
 };
 
 using TurnPtr = std::shared_ptr<const Turn>;
 using TurnVec = std::vector<TurnPtr>;
 
-enum class TokensType{OUTPUT, REASONING};
 
 
+// Effects 
 
-// Effects
-struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  std::vector<SchemaPtr> tools; };
+// Effects to the Network
+struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  SchemaMap tools; };
+// Effects to the UI
+struct TurnFinished { uint64_t sid; };
 struct EmitOutput { uint64_t sid; std::string content; };
 struct EmitReasoning { uint64_t sid; std::string content; };
-struct TurnFinished { uint64_t sid; };
-struct EffectNone { }; 
+struct EmitToolStarted { uint64_t sid; size_t cid; std::string name; };
+struct EmitToolResult { uint64_t sid; size_t cid; bool ok; std::string content; };
+// Effects to the Executor pool
+struct ToolExecute { uint64_t sid; uint64_t tid; ResolvedCall call; };
 
-using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished>;
+struct EffectNone { };
+
+using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished,
+                            ToolExecute, EmitToolStarted, EmitToolResult>;
+
+using Effects = std::vector<Effect>;
+
+
+enum class TokensType{OUTPUT, REASONING};
 
 class Session {
 
     public:
 
-        Session(uint64_t id, std::vector<SchemaPtr> allowed_tools);
+        Session(uint64_t id, SchemaMap allowed_tools);
 
         // Commands from the UI
-        Effect submitUserTurn(std::string content);
-    
+        Effects submitUserTurn(std::string content);
+
         // Events from the network
-        Effect onTextDelta(std::string tokens, TokensType type);
-        Effect onTurnComplete();
-        Effect onRequestFailed();
+        Effects onTextDelta(std::string tokens, TokensType type);
+        Effects onTurnComplete();
+        Effects onRequestFailed();
+        Effects onToolCallsRequest(ToolCallRequests tool_reqs);
+
+        // Events from the tool pool
+        Effects onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult result);
 
         std::shared_ptr<TurnVec> snapshotHistory() const;
 
@@ -54,10 +78,25 @@ class Session {
             uint64_t turn_id;
             std::string incoming;
         };
+        struct ToolCallExecData {
 
-        enum class State {IDLE, AWAITING_MODEL};
+            struct Slot {
+                std::string id; 
+                std::string name;
+                ToolResult result;
+            };
+
+            uint64_t turn_id;
+            std::vector<Slot> slots;
+            size_t remaining;
+        };
+
+        // Appends the tool turns and goes back to AWAITING_MODEL
+        void finishToolCalls(Effects& effects);
+
+        enum class State {IDLE, AWAITING_MODEL, TOOL_CALL_EXEC};
         State state = State::IDLE;
-        std::variant<std::monostate, AwaitingModelData> state_data;
+        std::variant<std::monostate, AwaitingModelData, ToolCallExecData> state_data;
         TurnVec history;
-        std::vector<SchemaPtr> tools;
+        SchemaMap tool_schemas;
 };

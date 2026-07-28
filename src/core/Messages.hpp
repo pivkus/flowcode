@@ -37,7 +37,7 @@ struct toNetworkMessage {
     uint64_t session_id;
     // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
     std::shared_ptr<TurnVec> turns;
-    std::vector<SchemaPtr> tools;
+    SchemaMap tools;
 };
 
 struct fromNetworkMessage {
@@ -45,10 +45,11 @@ struct fromNetworkMessage {
         OUTPUT_TOKENS,
         REASONING_TOKENS,
         TURN_FINISHED,
+        TOOL_CALL,
         ERROR
     };
 
     uint64_t session_id;
     Kind kind;
-    std::variant<std::string, ToolCallRequest> content;
+    std::variant<std::string, ToolCallRequests> content;
 };

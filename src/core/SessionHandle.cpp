@@ -60,8 +60,10 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
     serializeTurnsToJSON(*request.turns);
     
     if (!request.tools.empty()){
+        tool_schemas = std::move(request.tools);
         json_payload["tools"] = json::array();
-        for (const SchemaPtr& p : request.tools){
+
+        for (const auto& [_, p] : tool_schemas){
             json schema = buildJSONSchema(*p);
             json_payload["tools"].push_back(std::move(schema));
         }
@@ -88,25 +90,63 @@ void SessionHandle::completeMessage(){
 
     // TODO: support and log other finish reasons: content_filter, error
     if (finish_reason == "length"){
-        sendError("Context limit reach, truncated (finish_reason length)");
+        sendError("Context limit reached (finish_reason length)");
         return;
     }
 
-    std::println("{}", tc_incomming[0].name);
-    std::println("{}", tc_incomming[0].args);
-
     // TODO: log wierd finish_reason/tc_incomming combinations to make bug fixing easier in the future
-    // like finish_reason "stop" but tc_incomming has something
+    // like finish_reason "stop" but tc_incomming has something.
 
+    if (!tc_incomming.empty()){
+        ToolCallRequests tool_reqs;
+        for (const auto& [_, tc] : tc_incomming){
+            // Even incorrectly generated tool calls are sent so the error can be reported back to the model
+            // with other potentially correct calls
 
+            ToolCallRequest req = {
+                .name = std::move(tc.name),
+                .id = std::move(tc.id)
+            };
 
-    fromNetworkMessage done_msg {
-        .session_id = session_id,
-        .kind = TURN_FINISHED,
-        .content = ""
-    };
+            if (!tool_schemas.contains(req.name)){
+                req.correct = false;
+                tool_reqs.push_back(std::move(req));
+                continue;
+            }
 
-    out_queue->enqueue(std::move(done_msg));
+            json parsed_args = json::parse(tc.args, nullptr, false);
+            if (parsed_args.is_discarded()){
+                req.correct = false;
+                tool_reqs.push_back(std::move(req));
+                continue;
+            }
+
+            req.args = std::move(parsed_args);
+            req.correct = true;
+            tool_reqs.push_back(std::move(req));
+        }
+
+        fromNetworkMessage tool_msg {
+            .session_id = session_id,
+            .kind = TOOL_CALL,
+            .content = std::move(tool_reqs)
+        };
+        out_queue->enqueue(std::move(tool_msg));
+    } else {
+        fromNetworkMessage done_msg {
+            .session_id = session_id,
+            .kind = TURN_FINISHED,
+        };
+        out_queue->enqueue(std::move(done_msg));
+    }
+
+    tool_schemas.clear();
+    tc_incomming.clear();
+
+    saw_done = false;
+    finish_reason.clear();
+    native_finish_reason.clear();
+
 }
 
 CURL *SessionHandle::raw(){ return handle; }
@@ -198,6 +238,7 @@ json SessionHandle::buildJSONSchema(const ToolSchema& schema){
         }}
     };
 }
+
 
 void SessionHandle::handleEvent(std::string_view event){
 
@@ -302,7 +343,6 @@ void SessionHandle::handleEvent(std::string_view event){
                 if (arg_it != function_it->end() && arg_it->is_string()){
                     ts.args += arg_it->get_ref<const std::string&>();
                 }
-
 
             }
         }

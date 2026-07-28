@@ -103,40 +103,44 @@ void Backend::networkWorker(std::stop_token stop){
 }
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
-void Backend::executeEffect(Effect&& e){
-    std::visit(overloaded{
-        [&](SendRequest& r){
-            toNetworkQueue.enqueue({
-                .session_id = r.sid, 
-                .turns = std::move(r.snapshot),
-                .tools = std::move(r.tools) 
-            });
-        },
-        [&](EmitOutput& o){
-            toUIQueue.enqueue({
-                .session_id = o.sid,
-                .kind = toUIMessage::Kind::OUTPUT_TOKENS,
-                .content = std::move(o.content)
-            });
-        },
-        [&](EmitReasoning& r){
-            toUIQueue.enqueue({
-                .session_id = r.sid,
-                .kind = toUIMessage::Kind::REASONING_TOKENS,
-                .content = std::move(r.content)
-            });
-        },
-        [&](TurnFinished& t){
-            toUIQueue.enqueue({
-                .session_id = t.sid,
-                .kind = toUIMessage::Kind::TURN_FINISHED,
-                .content = ""
-            });
-        },
-        [&](EffectNone& e){},
-    }, e);
+void Backend::executeEffects(Effects&& effects){
+    for (auto& e : effects){
+        std::visit(overloaded{
+            [&](SendRequest& r){
+                toNetworkQueue.enqueue({
+                    .session_id = r.sid, 
+                    .turns = std::move(r.snapshot),
+                    .tools = std::move(r.tools) 
+                });
+            },
+            [&](EmitOutput& o){
+                toUIQueue.enqueue({
+                    .session_id = o.sid,
+                    .kind = toUIMessage::Kind::OUTPUT_TOKENS,
+                    .content = std::move(o.content)
+                });
+            },
+            [&](EmitReasoning& r){
+                toUIQueue.enqueue({
+                    .session_id = r.sid,
+                    .kind = toUIMessage::Kind::REASONING_TOKENS,
+                    .content = std::move(r.content)
+                });
+            },
+            [&](TurnFinished& t){
+                toUIQueue.enqueue({
+                    .session_id = t.sid,
+                    .kind = toUIMessage::Kind::TURN_FINISHED,
+                    .content = ""
+                });
+            },
+            [&](ToolsExecute& t){
+                // TODO
+            },
+            [&](EffectNone& e){},
+        }, e);
+    }
 }
-
 void Backend::coordinatorWorker(std::stop_token stop){
 
     // Register all tools in a global registry before starting - converts to json object here as well
@@ -155,8 +159,8 @@ void Backend::coordinatorWorker(std::stop_token stop){
     });
 
     // TODO: this is just a temporary for testing, each session should have its own way to configure allowed tools
-    std::vector<SchemaPtr> allowed_tools;
-    allowed_tools.push_back(reg.get("bash"));
+    SchemaMap allowed_tools;
+    allowed_tools["bash"] = reg.get("bash");
 
     std::unordered_map<uint64_t, Session> sessions;
     while (!stop.stop_requested()){
@@ -171,8 +175,8 @@ void Backend::coordinatorWorker(std::stop_token stop){
                     break;
                 case PROMPT_SUBMITED: {
                     Session& s = sessions.at(msg->session_id);
-                    Effect effect = s.submitUserTurn(std::move(msg->content));
-                    executeEffect(std::move(effect));
+                    Effects effects = s.submitUserTurn(std::move(msg->content));
+                    executeEffects(std::move(effects));
                     break;
                 }
             }
@@ -180,31 +184,35 @@ void Backend::coordinatorWorker(std::stop_token stop){
 
         while (auto msg = fromNetworkQueue.dequeue()){
             Session& s = sessions.at(msg->session_id);
-            Effect effect;
+            Effects effects;
 
             switch (msg->kind){
     
                 case fromNetworkMessage::Kind::OUTPUT_TOKENS: {
                     auto content = std::get<std::string>(msg->content);
-                    effect = s.onTextDelta(std::move(content), TokensType::OUTPUT);
+                    effects = s.onTextDelta(std::move(content), TokensType::OUTPUT);
                     break;
                 }
                 case fromNetworkMessage::Kind::REASONING_TOKENS: {
                     auto content = std::get<std::string>(msg->content); 
-                    effect = s.onTextDelta(std::move(content), TokensType::REASONING);
+                    effects = s.onTextDelta(std::move(content), TokensType::REASONING);
                     break;
                 }
                 case fromNetworkMessage::Kind::TURN_FINISHED: {
-                    effect = s.onTurnComplete();
+                    effects = s.onTurnComplete();
                     break;
                 }
                 case fromNetworkMessage::Kind::ERROR: {
-                    effect = s.onRequestFailed();
+                    effects = s.onRequestFailed();
                     break;
+                }
+                case fromNetworkMessage::Kind::TOOL_CALL: {
+                    auto content = std::get<ToolCallRequests>(msg->content);
+                    effects = s.onToolCallsRequest(std::move(content));
                 }
             }
 
-            executeEffect(std::move(effect));
+            executeEffects(std::move(effects));
         }
 
 
