@@ -21,8 +21,12 @@ set(CURL_USE_LIBPSL OFF)
 
 add_subdirectory(vendor/curl)
 
+# reproc: cross-platform process library. Enable the C++ wrapper (reproc++).
+set(REPROC++ ON CACHE BOOL "" FORCE)
+add_subdirectory(vendor/reproc)
+
 add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json)
 
 add_executable(flowcode src/main.cpp src/core/SessionHandle.cpp src/core/Backend.cpp src/core/Tools.cpp src/ui/MainWindow.cpp src/Bridge.cpp src/ui/SessionWidget.cpp src/core/Session.cpp)
-target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets)
+target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets reproc++)
