@@ -72,7 +72,10 @@ Effects Session::onTurnComplete(){
     TurnPtr turn = std::make_shared<Turn>(Turn{
         .turn_id = static_cast<uint64_t>(history.size()),
         .role = ASSISTANT,
-        .content = std::move(aw.incoming)
+        .content = AssistantContent{ 
+            .text = std::move(aw.incoming), 
+            .tool_calls = {}
+        }
     });
 
     history.push_back(std::move(turn));
@@ -105,7 +108,10 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     TurnPtr turn = std::make_shared<Turn>(Turn{
         .turn_id = turn_id,
         .role = ASSISTANT,
-        .content = std::move(aw.incoming)
+        .content = AssistantContent {
+            .text = std::move(aw.incoming),
+            .tool_calls = tool_reqs // Does a copy right now
+        }
     });
 
     history.push_back(std::move(turn));
@@ -155,6 +161,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
         .remaining = tool_reqs.size()
     };
 
+
     if (dispatched > 0){
         // Case: All emmited tool call requests were invalid, nothing to dispatch
         finishToolCalls(effects);
@@ -166,7 +173,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
 void Session::finishToolCalls(Effects& effects){
     if (state != State::TOOL_CALL_EXEC) return;
 
-    auto ts = std::get<ToolCallExecData>(state_data);
+    auto& ts = std::get<ToolCallExecData>(state_data);
     if (ts.remaining > 0) return;
 
     using enum Turn::Role;
@@ -201,7 +208,7 @@ void Session::finishToolCalls(Effects& effects){
 Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult result){
     if (state != State::TOOL_CALL_EXEC) return {};
 
-    auto ts = std::get<ToolCallExecData>(state_data);
+    auto& ts = std::get<ToolCallExecData>(state_data);
     if (ts.turn_id != turn_id) return {}; // stale turn_id
 
     if (ts.slots.size() <= call_id) return {}; // invalid call_id

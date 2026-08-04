@@ -75,7 +75,6 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
 }
 
 void SessionHandle::completeMessage(){
-
     // handle remaining chunk that might be present
     if (chunks_buffer.length() > 0){
         handleEvent(chunks_buffer);
@@ -87,7 +86,7 @@ void SessionHandle::completeMessage(){
         sendError("Model didnt terminate correctly");
         return;
     }
-
+    
     // TODO: support and log other finish reasons: content_filter, error
     if (finish_reason == "length"){
         sendError("Context limit reached (finish_reason length)");
@@ -96,7 +95,6 @@ void SessionHandle::completeMessage(){
 
     // TODO: log wierd finish_reason/tc_incomming combinations to make bug fixing easier in the future
     // like finish_reason "stop" but tc_incomming has something.
-
     if (!tc_incomming.empty()){
         ToolCallRequests tool_reqs;
         for (const auto& [_, tc] : tc_incomming){
@@ -171,6 +169,8 @@ size_t SessionHandle::writeback(const char* data, size_t len){
     return len;
 }
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+
 void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
     static constexpr auto roleStr = [](Turn::Role role) -> std::string_view {
         switch (role) {
@@ -183,10 +183,36 @@ void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
     };
 
     for (const auto& turn : turns) {
-        json_payload["messages"].push_back({
-            {"role",    roleStr(turn->role)},
-            {"content", turn->content}
-        });
+        json msg = {{"role", roleStr(turn->role)}};
+
+        std::visit(overloaded{
+            [&](const std::string& text) {
+                msg["content"] = text;
+            },
+            [&](const AssistantContent& a) {
+                msg["content"] = a.text;
+                if (!a.tool_calls.empty()) {
+                    json calls = json::array();
+                    for (const auto& call : a.tool_calls) {
+                        calls.push_back({
+                            {"id",   call.id},
+                            {"type", "function"},
+                            {"function", {
+                                {"name",      call.name},
+                                {"arguments", call.args.dump()}
+                            }}
+                        });
+                    }
+                    msg["tool_calls"] = std::move(calls);
+                }
+            },
+            [&](const ToolResultContent& t) {
+                msg["tool_call_id"] = t.tool_call_id;
+                msg["content"]      = t.content;
+            }
+        }, turn->content);
+
+        json_payload["messages"].push_back(std::move(msg));
     }
 }
 

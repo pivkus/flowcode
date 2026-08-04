@@ -28,6 +28,7 @@ class Backend {
     private:
         void networkWorker(std::stop_token stop);
         void coordinatorWorker(std::stop_token stop);
+        void executorWorker(std::stop_token stop);
 
         std::jthread network_thread;
 
@@ -40,6 +41,11 @@ class Backend {
 
         ConcurrentQueue<toNetworkMessage> toNetworkQueue;
         ConcurrentQueue<fromNetworkMessage> fromNetworkQueue;
+
+        static constexpr int executor_pool_size = 4;
+        ConcurrentQueue<ToolExecute> toToolQueue;
+        ConcurrentQueue<fromToolMessage> fromToolQueue;
+        std::vector<std::jthread> executor_threads;
 
         CURLM *multi;
 

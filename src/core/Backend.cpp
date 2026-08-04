@@ -6,14 +6,17 @@ Backend::Backend(){
     curl_global_init(CURL_GLOBAL_ALL);
     multi = curl_multi_init();
 
-    fromUIQueue.setCallback([this]{
+    auto wakeCoordinator = [this]{
         {
             // hold the lock while setting coord_notified
             std::lock_guard<std::mutex> lock(coord_mutex);
             coord_notified = true;
         }
         coord_cv.notify_one();
-    });
+    };
+
+    fromUIQueue.setCallback(wakeCoordinator);
+    fromToolQueue.setCallback(wakeCoordinator);
 
     // TODO: Backend and Bridge have a circular reference with these callbacks, make sure they get deleted in a way
     // so this will no be called on a destroyed object
@@ -27,11 +30,19 @@ Backend::Backend(){
     // lambda to fix argument order so "this" is first
     network_thread = std::jthread([this](std::stop_token stop){ networkWorker(stop); });
     coordinator_thread = std::jthread([this](std::stop_token stop){ coordinatorWorker(stop); });
+
+    executor_threads.reserve(executor_pool_size);
+    for (int i = 0; i < executor_pool_size; ++i){
+        executor_threads.emplace_back([this](std::stop_token stop){ executorWorker(stop); });
+    }
 }
 
 Backend::~Backend(){
     network_thread.request_stop();
     coordinator_thread.request_stop();
+
+    for (auto& t : executor_threads) t.request_stop();
+    for (auto& t : executor_threads) t.join();
 
     curl_multi_wakeup(multi);
     // jthread would only join in its own destructor, after multi is already cleaned up below
@@ -102,6 +113,30 @@ void Backend::networkWorker(std::stop_token stop){
     
 }
 
+void Backend::executorWorker(std::stop_token stop){
+
+    while (!stop.stop_requested()){
+        auto work = toToolQueue.wait_dequeue(stop);
+        if (!work) continue; // woken by a stop request with no work queued
+
+        ToolResult result = work->call.fn(work->call.args, stop);
+
+        fromToolQueue.enqueue(fromToolMessage{
+            .session_id = work->sid,
+            .turn_id    = work->tid,
+            .call_id    = work->call.call_id,
+            .result     = std::move(result)
+        });
+    }
+}
+
+ToolResult bash_tool_testing(const json& args, std::stop_token stop){
+    return ToolResult {
+        .ok = false,
+        .content = "tool is not implemented yet, abort this task and alert user"
+    };
+}
+
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 void Backend::executeEffects(Effects&& effects){
     for (auto& e : effects){
@@ -127,6 +162,8 @@ void Backend::executeEffects(Effects&& effects){
                     .content = std::move(r.content)
                 });
             },
+            [&](EmitToolStarted& t){},
+            [&](EmitToolResult& t){},
             [&](TurnFinished& t){
                 toUIQueue.enqueue({
                     .session_id = t.sid,
@@ -134,8 +171,8 @@ void Backend::executeEffects(Effects&& effects){
                     .content = ""
                 });
             },
-            [&](ToolsExecute& t){
-                // TODO
+            [&](ToolExecute& t){
+                toToolQueue.enqueue(std::move(t));
             },
             [&](EffectNone& e){},
         }, e);
@@ -156,7 +193,7 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 .required = true
             }
         }
-    });
+    }, bash_tool_testing);
 
     // TODO: this is just a temporary for testing, each session should have its own way to configure allowed tools
     SchemaMap allowed_tools;
@@ -212,6 +249,12 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 }
             }
 
+            executeEffects(std::move(effects));
+        }
+
+        while (auto msg = fromToolQueue.dequeue()){
+            Session& s = sessions.at(msg->session_id);
+            Effects effects = s.onToolCallResult(msg->turn_id, msg->call_id, std::move(msg->result));
             executeEffects(std::move(effects));
         }
 

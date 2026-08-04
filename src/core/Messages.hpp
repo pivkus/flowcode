@@ -53,3 +53,10 @@ struct fromNetworkMessage {
     Kind kind;
     std::variant<std::string, ToolCallRequests> content;
 };
+
+struct fromToolMessage {
+    uint64_t   session_id;
+    uint64_t   turn_id;
+    size_t     call_id;
+    ToolResult result;
+};

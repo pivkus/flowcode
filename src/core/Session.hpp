@@ -7,8 +7,7 @@
 
 #include "Tools.hpp"
 
-// Helper to build a visitor out of lambdas for std::visit
-template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+
 
 struct AssistantContent { std::string text; ToolCallRequests tool_calls; };
 struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
