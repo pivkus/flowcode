@@ -67,7 +67,7 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
             json schema = buildJSONSchema(*p);
             json_payload["tools"].push_back(std::move(schema));
         }
-        json_payload["parallel_tool_calls"] = false;
+        json_payload["parallel_tool_calls"] = true;
     }
 
     str_payload = json_payload.dump();

@@ -131,7 +131,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             // correct means that the tool is verified to exist (and is allowed)
             ResolvedCall call = {
                 .call_id = call_id,
-                .fn = tool_schemas[req.name]->execute,
+                .name = req.name,
                 .args = std::move(req.args)
             };
             effects.push_back(ToolExecute {

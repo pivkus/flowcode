@@ -47,6 +47,9 @@ class Backend {
         ConcurrentQueue<fromToolMessage> fromToolQueue;
         std::vector<std::jthread> executor_threads;
 
+        // Global tool registry
+        ToolRegistry tool_registry;
+
         CURLM *multi;
 
 };

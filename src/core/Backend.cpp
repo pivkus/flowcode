@@ -1,6 +1,9 @@
 #include "Backend.hpp"
 #include "SessionHandle.hpp"
 
+// TODO: is there an easier way to include all of them?
+#include "tools/BashTool.hpp"
+
 Backend::Backend(){
 
     curl_global_init(CURL_GLOBAL_ALL);
@@ -25,6 +28,9 @@ Backend::Backend(){
         curl_multi_wakeup(multi);
     });
 
+    // Register built-in tools in the global tool registry
+    // TODO: factor this out into a function
+    tool_registry.add(std::make_unique<BashTool>());
 
     // jthread prepends stop_token meanining it would call networkWorker(stop_token, this) like this
     // lambda to fix argument order so "this" is first
@@ -116,15 +122,16 @@ void Backend::networkWorker(std::stop_token stop){
 void Backend::executorWorker(std::stop_token stop){
 
     while (!stop.stop_requested()){
-        auto work = toToolQueue.wait_dequeue(stop);
-        if (!work) continue; // woken by a stop request with no work queued
+        auto task = toToolQueue.wait_dequeue(stop);
+        if (!task) continue; // woken by a stop request with no work queued
 
-        ToolResult result = work->call.fn(work->call.args, stop);
+        Tool* tool = tool_registry.get_tool(task->call.name);
+        ToolResult result = tool->execute(task->call.args, stop);
 
         fromToolQueue.enqueue(fromToolMessage{
-            .session_id = work->sid,
-            .turn_id    = work->tid,
-            .call_id    = work->call.call_id,
+            .session_id = task->sid,
+            .turn_id    = task->tid,
+            .call_id    = task->call.call_id,
             .result     = std::move(result)
         });
     }
@@ -162,8 +169,20 @@ void Backend::executeEffects(Effects&& effects){
                     .content = std::move(r.content)
                 });
             },
-            [&](EmitToolStarted& t){},
-            [&](EmitToolResult& t){},
+            [&](EmitToolStarted& t){
+                toUIQueue.enqueue({
+                    .session_id = t.sid,
+                    .kind = toUIMessage::Kind::TOOL_CALL_STARTED,
+                    .content = std::move(t.name)
+                });
+            },
+            [&](EmitToolResult& t){
+                toUIQueue.enqueue({
+                    .session_id = t.sid,
+                    .kind = toUIMessage::Kind::TOOL_CALL_RESULT,
+                    .content = t.ok ? "ok" : "failed"
+                });
+            },
             [&](TurnFinished& t){
                 toUIQueue.enqueue({
                     .session_id = t.sid,
@@ -180,24 +199,9 @@ void Backend::executeEffects(Effects&& effects){
 }
 void Backend::coordinatorWorker(std::stop_token stop){
 
-    // Register all tools in a global registry before starting - converts to json object here as well
-    ToolRegistry reg;
-    reg.registerTool(ToolSchema {
-        .name = "bash",
-        .description = "Run a bash command and return its output.",
-        .params = {
-            {
-                .name = "command", 
-                .description = "The bash command to execute.", 
-                .type = ToolParamType::String,
-                .required = true
-            }
-        }
-    }, bash_tool_testing);
-
     // TODO: this is just a temporary for testing, each session should have its own way to configure allowed tools
     SchemaMap allowed_tools;
-    allowed_tools["bash"] = reg.get("bash");
+    allowed_tools["bash"] = tool_registry.get_schema("bash");
 
     std::unordered_map<uint64_t, Session> sessions;
     while (!stop.stop_requested()){

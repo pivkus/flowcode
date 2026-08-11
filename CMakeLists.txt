@@ -28,5 +28,15 @@ add_subdirectory(vendor/reproc)
 add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json)
 
-add_executable(flowcode src/main.cpp src/core/SessionHandle.cpp src/core/Backend.cpp src/core/Tools.cpp src/ui/MainWindow.cpp src/Bridge.cpp src/ui/SessionWidget.cpp src/core/Session.cpp)
+add_executable(flowcode
+    src/main.cpp
+    src/Bridge.cpp
+    src/core/Backend.cpp
+    src/core/Session.cpp
+    src/core/SessionHandle.cpp
+    src/core/Tools.cpp
+    src/core/tools/BashTool.cpp
+    src/ui/MainWindow.cpp
+    src/ui/SessionWidget.cpp
+)
 target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets reproc++)

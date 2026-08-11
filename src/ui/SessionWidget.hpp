@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QPlainTextEdit>
 #include <QLineEdit>
+#include <QTextCharFormat>
 
 #include "../Bridge.hpp"
 
@@ -13,6 +14,9 @@ class SessionWidget : public QWidget {
     public:
         SessionWidget(uint64_t id, QWidget *parent = nullptr);
         void appendTokens(const QString &content);
+        void appendReasoning(const QString &content);
+        void appendToolStarted(const QString &name);
+        void appendToolFinished(const QString &status);
         void finishResponse();
         void reportError(const QString &content);
     signals:
@@ -20,10 +24,18 @@ class SessionWidget : public QWidget {
     private slots:
         void submitPrompt();
     private:
+        void appendStyled(const QString &content, const QTextCharFormat &fmt);
+
         uint64_t id;
         bool active_response = false;
         QLineEdit *input = nullptr;
         QPlainTextEdit *text_box = nullptr;
+
+        QTextCharFormat output_fmt;
+        QTextCharFormat reasoning_fmt;
+        QTextCharFormat tool_fmt;
+        QTextCharFormat prompt_fmt;
+        QTextCharFormat error_fmt;
 };
 
 class SessionManager : public QObject {
@@ -34,6 +46,9 @@ class SessionManager : public QObject {
     
     private slots:
         void routeTokens(uint64_t id, const QString &content);
+        void routeReasoning(uint64_t id, const QString &content);
+        void routeToolStarted(uint64_t id, const QString &name);
+        void routeToolFinished(uint64_t id, const QString &status);
         void routeError(uint64_t id, const QString &content);
         void routeFinish(uint64_t id);
     private:

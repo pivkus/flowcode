@@ -36,7 +36,6 @@ struct ToolSchema {
     std::string description;
     std::vector<ToolParam> params;
 
-    ToolFn execute;
 };
 using SchemaPtr = std::shared_ptr<const ToolSchema>;
 using SchemaMap = std::map<std::string, SchemaPtr, std::less<>>;
@@ -50,17 +49,32 @@ struct ToolCallRequest {
 };
 using ToolCallRequests = std::vector<ToolCallRequest>;
 
+
+// The base interface for tools
+class Tool {
+    public:
+        virtual ~Tool() = default;
+        virtual ToolResult execute(const json& args, std::stop_token stop) = 0;
+        // Constructs a ToolSchema and returns it by value
+        virtual ToolSchema schema() const = 0;
+};
+
 struct ResolvedCall {
     uint64_t call_id;
-    ToolFn fn;
+    std::string name;
     json args;
 };
 
 class ToolRegistry {
     public:
-        void registerTool(ToolSchema schema, ToolFn fn);
-        SchemaPtr get(std::string_view key) const;
-    private:
-        SchemaMap registry;
+        void add(std::unique_ptr<Tool> tool);
+        SchemaPtr get_schema(std::string_view name) const;
+        // tools are owned by the registry (unique_ptr), executor only borrows them
+        Tool* get_tool(std::string_view name) const;
 
+    private:
+
+        // TODO: alias this type
+        std::map<std::string, std::unique_ptr<Tool>, std::less<>> tools;
+        SchemaMap schemas;
 };

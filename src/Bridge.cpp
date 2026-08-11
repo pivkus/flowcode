@@ -27,14 +27,22 @@ void Bridge::drainMessages(){
                 emit responseError(msg->session_id, QString::fromStdString(msg->content));
                 break;
 
-            // TODO: separate output/reasoning
             case toUIMessage::Kind::OUTPUT_TOKENS:
-            case toUIMessage::Kind::REASONING_TOKENS:
                 emit tokensReceived(msg->session_id, QString::fromStdString(msg->content));
+                break;
 
-            // TODO: implement
+            case toUIMessage::Kind::REASONING_TOKENS:
+                emit reasoningReceived(msg->session_id, QString::fromStdString(msg->content));
+                break;
+
             case toUIMessage::Kind::TOOL_CALL_STARTED:
+                emit toolCallStarted(msg->session_id, QString::fromStdString(msg->content));
+                break;
+
             case toUIMessage::Kind::TOOL_CALL_RESULT:
+                emit toolCallFinished(msg->session_id, QString::fromStdString(msg->content));
+                break;
+
             default:
                 break;
         }
