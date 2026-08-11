@@ -43,6 +43,7 @@ class SessionHandle {
         static std::string_view toJSONType(ToolParamType type);
         json buildJSONSchema(const ToolSchema& schema);
 
+        bool validateToolCall(std::string& name, json& args);
 
         CURL *handle;
         struct curl_slist *headers;

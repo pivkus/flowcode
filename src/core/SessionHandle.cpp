@@ -74,6 +74,57 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
     curl_easy_setopt(handle, CURLOPT_POSTFIELDS, str_payload.c_str()); // str_payload needs to live until request finishes, doesnt copy
 }
 
+bool SessionHandle::validateToolCall(std::string& name, json& args){
+    if (!tool_schemas.contains(name)) return false;
+
+    auto& schema = tool_schemas.at(name);
+    for (const ToolParam& param : schema->params ){
+
+        if (!args.contains(param.name)){
+            if (param.required) return false;
+            else continue;
+        }
+
+        // Here we know the key is present, check the type
+        json& arg = args.at(param.name);
+        switch (param.type){
+            using enum ToolParamType;
+
+            case String: {
+                if (!arg.is_string()) return false;
+                if (param.allowed_vals.empty()) break;
+                // There are only some allowed values for this param
+                auto& val = arg.get_ref<std::string&>();
+                if (!std::ranges::contains(param.allowed_vals, val)) return false;
+                break;
+            }
+            case Integer: {
+                if (!arg.is_number_integer()) return false;
+                break;
+            }
+            case Number: {
+                if (!arg.is_number()) return false;
+                break;
+            }
+            case Boolean: {
+                if (!arg.is_boolean()) return false;
+                break;
+            }
+            case StringArray: {
+                if (!arg.is_array()) return false;
+
+                if (!std::ranges::all_of(arg, &json::is_string)) return false;
+                break;
+            }
+            default: {
+                break;
+            }
+        }
+    }
+
+    return true;
+}
+
 void SessionHandle::completeMessage(){
     // handle remaining chunk that might be present
     if (chunks_buffer.length() > 0){
@@ -106,14 +157,17 @@ void SessionHandle::completeMessage(){
                 .id = std::move(tc.id)
             };
 
-            if (!tool_schemas.contains(req.name)){
+            // TODO: ToolCallRequest only caries binary correct/not information - no way for session to report
+            // specific issue to the model
+            json parsed_args = json::parse(tc.args, nullptr, false);
+            if (parsed_args.is_discarded()){
                 req.correct = false;
                 tool_reqs.push_back(std::move(req));
                 continue;
             }
 
-            json parsed_args = json::parse(tc.args, nullptr, false);
-            if (parsed_args.is_discarded()){
+            // Validate the requested tool call
+            if (!validateToolCall(req.name, parsed_args)){
                 req.correct = false;
                 tool_reqs.push_back(std::move(req));
                 continue;

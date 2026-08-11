@@ -19,6 +19,7 @@ struct ToolParam {
     ToolParamType type;
     bool required;
 
+    // TODO - consider using a hash set here instead of a vector - would it really be faster for typical use case?
     std::vector<std::string> allowed_vals; // String only, empty is unconstrained
 };
 

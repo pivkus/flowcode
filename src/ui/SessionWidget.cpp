@@ -23,6 +23,7 @@ SessionWidget::SessionWidget(uint64_t id, QWidget *parent)
     reasoning_fmt.setForeground(QColor(128, 128, 128));
     tool_fmt.setForeground(QColor(0, 150, 170));
     prompt_fmt.setForeground(QColor(80, 160, 80));
+
     error_fmt.setForeground(QColor(200, 60, 60));
 }
 
@@ -38,6 +39,9 @@ void SessionWidget::appendStyled(const QString &content, const QTextCharFormat &
     if (is_at_bottom) v_bar->setValue(v_bar->maximum());
 }
 
+// TODO: there is a lot of functions that just react slightly differently based on
+// the type of text appended - maybe its worth factoring out to a single "append" with a switch case
+// on the type - consider
 void SessionWidget::appendTokens(const QString &content){
     appendStyled(content, output_fmt);
 }
