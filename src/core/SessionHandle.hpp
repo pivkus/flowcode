@@ -43,7 +43,8 @@ class SessionHandle {
         static std::string_view toJSONType(ToolParamType type);
         json buildJSONSchema(const ToolSchema& schema);
 
-        bool validateToolCall(std::string& name, json& args);
+        // Returns an empty string if valid, otherwise a human-readable reason
+        std::string validateToolCall(std::string& name, json& args);
 
         CURL *handle;
         struct curl_slist *headers;
@@ -63,7 +64,7 @@ class SessionHandle {
             std::string args;
         };
         std::map<int, ToolSlot, std::less<>> tc_incomming;
-        SchemaMap tool_schemas;
+        SchemaMapPtr tool_schemas;
 
         // State for response termination
         std::string finish_reason;

@@ -1,7 +1,7 @@
 #include "Session.hpp"
 
-Session::Session(uint64_t id, SchemaMap allowed_tools)
-: session_id(id), tool_schemas(allowed_tools)
+Session::Session(uint64_t id, SchemaMapPtr allowed_tools)
+: session_id(id), tool_schemas(std::move(allowed_tools))
 {
     using enum Turn::Role;
 
@@ -35,14 +35,12 @@ Effects Session::submitUserTurn(std::string content) {
 
     state = State::AWAITING_MODEL;
     state_data = AwaitingModelData{
-        .turn_id = turn_id,
         .incoming = ""
     };
 
     return { SendRequest{
         .sid = session_id,
         .snapshot = snapshotHistory(),
-        // TODO this is creating a copy of the tool map, turn to shared_ptr i think
         .tools = tool_schemas
     }};
 }
@@ -127,8 +125,8 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             .name = req.name
         });
 
-        if (req.correct){
-            // correct means that the tool is verified to exist (and is allowed)
+        if (req.error.empty()){
+            // no error means the tool is verified to exist (and is allowed)
             ResolvedCall call = {
                 .call_id = call_id,
                 .name = req.name,
@@ -146,9 +144,9 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             });
             dispatched++;
         } else {
-            slots[call_id].result = { 
-                .ok = false, 
-                .content = "Error: Invalid tool call request"
+            slots[call_id].result = {
+                .ok = false,
+                .content = "Error: " + req.error
             };
         }
         call_id++;
@@ -158,11 +156,11 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     state_data = ToolCallExecData {
         .slots = std::move(slots),
         .turn_id = turn_id,
-        .remaining = tool_reqs.size()
+        .remaining = dispatched
     };
 
 
-    if (dispatched > 0){
+    if (dispatched == 0){
         // Case: All emmited tool call requests were invalid, nothing to dispatch
         finishToolCalls(effects);
     } 
@@ -193,14 +191,11 @@ void Session::finishToolCalls(Effects& effects){
     effects.push_back(SendRequest{
         .sid = session_id,
         .snapshot = snapshotHistory(),
-        // TODO this is creating a copy of the tool map, turn to shared_ptr i think
         .tools = tool_schemas
     });
 
     state = State::AWAITING_MODEL;
     state_data = AwaitingModelData {
-        // TODO: fix this -1 hack
-        .turn_id = static_cast<uint64_t>(history.size()) - 1,
         .incoming = ""
     };
 }

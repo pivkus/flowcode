@@ -29,7 +29,7 @@ using TurnVec = std::vector<TurnPtr>;
 // Effects 
 
 // Effects to the Network
-struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  SchemaMap tools; };
+struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
 // Effects to the UI
 struct TurnFinished { uint64_t sid; };
 struct EmitOutput { uint64_t sid; std::string content; };
@@ -53,7 +53,7 @@ class Session {
 
     public:
 
-        Session(uint64_t id, SchemaMap allowed_tools);
+        Session(uint64_t id, SchemaMapPtr allowed_tools);
 
         // Commands from the UI
         Effects submitUserTurn(std::string content);
@@ -74,7 +74,6 @@ class Session {
     private:
 
         struct AwaitingModelData {
-            uint64_t turn_id;
             std::string incoming;
         };
         struct ToolCallExecData {
@@ -97,5 +96,5 @@ class Session {
         State state = State::IDLE;
         std::variant<std::monostate, AwaitingModelData, ToolCallExecData> state_data;
         TurnVec history;
-        SchemaMap tool_schemas;
+        SchemaMapPtr tool_schemas;
 };

@@ -59,11 +59,11 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
 
     serializeTurnsToJSON(*request.turns);
     
-    if (!request.tools.empty()){
+    if (request.tools && !request.tools->empty()){
         tool_schemas = std::move(request.tools);
         json_payload["tools"] = json::array();
 
-        for (const auto& [_, p] : tool_schemas){
+        for (const auto& [_, p] : *tool_schemas){
             json schema = buildJSONSchema(*p);
             json_payload["tools"].push_back(std::move(schema));
         }
@@ -74,14 +74,14 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
     curl_easy_setopt(handle, CURLOPT_POSTFIELDS, str_payload.c_str()); // str_payload needs to live until request finishes, doesnt copy
 }
 
-bool SessionHandle::validateToolCall(std::string& name, json& args){
-    if (!tool_schemas.contains(name)) return false;
+std::string SessionHandle::validateToolCall(std::string& name, json& args){
+    if (!tool_schemas || !tool_schemas->contains(name)) return "unknown tool '" + name + "'";
 
-    auto& schema = tool_schemas.at(name);
+    auto& schema = tool_schemas->at(name);
     for (const ToolParam& param : schema->params ){
 
         if (!args.contains(param.name)){
-            if (param.required) return false;
+            if (param.required) return "missing required parameter '" + param.name + "'";
             else continue;
         }
 
@@ -91,29 +91,35 @@ bool SessionHandle::validateToolCall(std::string& name, json& args){
             using enum ToolParamType;
 
             case String: {
-                if (!arg.is_string()) return false;
+                if (!arg.is_string()) return "parameter '" + param.name + "' must be a string";
                 if (param.allowed_vals.empty()) break;
                 // There are only some allowed values for this param
                 auto& val = arg.get_ref<std::string&>();
-                if (!std::ranges::contains(param.allowed_vals, val)) return false;
+                if (!std::ranges::contains(param.allowed_vals, val)){
+                    std::string allowed;
+                    for (const auto& v : param.allowed_vals){
+                        if (!allowed.empty()) allowed += ", ";
+                        allowed += v;
+                    }
+                    return "parameter '" + param.name + "' must be one of: " + allowed;
+                }
                 break;
             }
             case Integer: {
-                if (!arg.is_number_integer()) return false;
+                if (!arg.is_number_integer()) return "parameter '" + param.name + "' must be an integer";
                 break;
             }
             case Number: {
-                if (!arg.is_number()) return false;
+                if (!arg.is_number()) return "parameter '" + param.name + "' must be a number";
                 break;
             }
             case Boolean: {
-                if (!arg.is_boolean()) return false;
+                if (!arg.is_boolean()) return "parameter '" + param.name + "' must be a boolean";
                 break;
             }
             case StringArray: {
-                if (!arg.is_array()) return false;
-
-                if (!std::ranges::all_of(arg, &json::is_string)) return false;
+                if (!arg.is_array() || !std::ranges::all_of(arg, &json::is_string))
+                    return "parameter '" + param.name + "' must be an array of strings";
                 break;
             }
             default: {
@@ -122,7 +128,7 @@ bool SessionHandle::validateToolCall(std::string& name, json& args){
         }
     }
 
-    return true;
+    return "";
 }
 
 void SessionHandle::completeMessage(){
@@ -138,9 +144,16 @@ void SessionHandle::completeMessage(){
         return;
     }
     
-    // TODO: support and log other finish reasons: content_filter, error
     if (finish_reason == "length"){
         sendError("Context limit reached (finish_reason length)");
+        return;
+    }
+    if (finish_reason == "content_filter"){
+        sendError("Response blocked (finish_reason content_filter)");
+        return;
+    }
+    if (finish_reason == "error" || native_finish_reason == "error"){
+        sendError("Provider reported an error (finish_reason error)");
         return;
     }
 
@@ -153,28 +166,25 @@ void SessionHandle::completeMessage(){
             // with other potentially correct calls
 
             ToolCallRequest req = {
-                .name = std::move(tc.name),
-                .id = std::move(tc.id)
+                .id = std::move(tc.id),
+                .name = std::move(tc.name)
             };
 
-            // TODO: ToolCallRequest only caries binary correct/not information - no way for session to report
-            // specific issue to the model
             json parsed_args = json::parse(tc.args, nullptr, false);
             if (parsed_args.is_discarded()){
-                req.correct = false;
+                req.error = "arguments are not valid JSON";
                 tool_reqs.push_back(std::move(req));
                 continue;
             }
 
-            // Validate the requested tool call
-            if (!validateToolCall(req.name, parsed_args)){
-                req.correct = false;
+            // Validate the requested tool call, error is empty when the call is valid
+            req.error = validateToolCall(req.name, parsed_args);
+            if (!req.error.empty()){
                 tool_reqs.push_back(std::move(req));
                 continue;
             }
 
             req.args = std::move(parsed_args);
-            req.correct = true;
             tool_reqs.push_back(std::move(req));
         }
 
@@ -192,7 +202,7 @@ void SessionHandle::completeMessage(){
         out_queue->enqueue(std::move(done_msg));
     }
 
-    tool_schemas.clear();
+    tool_schemas.reset();
     tc_incomming.clear();
 
     saw_done = false;

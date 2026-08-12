@@ -40,11 +40,12 @@ struct ToolSchema {
 };
 using SchemaPtr = std::shared_ptr<const ToolSchema>;
 using SchemaMap = std::map<std::string, SchemaPtr, std::less<>>;
+using SchemaMapPtr = std::shared_ptr<const SchemaMap>;
 
 struct ToolCallRequest {
-    bool correct;
+    std::string error; // empty means the call is valid
 
-    std::string id; 
+    std::string id;
     std::string name;
     json args;
 };

@@ -200,8 +200,9 @@ void Backend::executeEffects(Effects&& effects){
 void Backend::coordinatorWorker(std::stop_token stop){
 
     // TODO: this is just a temporary for testing, each session should have its own way to configure allowed tools
-    SchemaMap allowed_tools;
-    allowed_tools["bash"] = tool_registry.get_schema("bash");
+    SchemaMap tool_map;
+    tool_map["bash"] = tool_registry.get_schema("bash");
+    SchemaMapPtr allowed_tools = std::make_shared<const SchemaMap>(std::move(tool_map));
 
     std::unordered_map<uint64_t, Session> sessions;
     while (!stop.stop_requested()){

@@ -37,7 +37,7 @@ struct toNetworkMessage {
     uint64_t session_id;
     // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
     std::shared_ptr<TurnVec> turns;
-    SchemaMap tools;
+    SchemaMapPtr tools;
 };
 
 struct fromNetworkMessage {

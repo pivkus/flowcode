@@ -9,7 +9,7 @@
 #include <reproc++/reproc.hpp>
 #include <reproc++/drain.hpp>
 
-#define BASH_DEFAULT_TIMEOUT 1
+#define BASH_DEFAULT_TIMEOUT 120
 #define BASH_MAX_TIMEOUT 600
 
 #define BASH_MAX_OUTPUT_CHARS 30000
