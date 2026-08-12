@@ -38,6 +38,7 @@ SessionHandle::~SessionHandle(){
 }
 
 void SessionHandle::sendError(std::string errmsg){
+    debug_print("{}", errmsg);
     fromNetworkMessage resp {
         .session_id = session_id,
         .kind = ERROR,
@@ -157,8 +158,10 @@ void SessionHandle::completeMessage(){
         return;
     }
 
-    // TODO: log wierd finish_reason/tc_incomming combinations to make bug fixing easier in the future
-    // like finish_reason "stop" but tc_incomming has something.
+    // Log wierd behaviour for easier debugging
+    if (finish_reason == "stop" && !tc_incomming.empty()) debug_print("Model stopped but returned tool calls" );
+    if (finish_reason == "tool_calls" && tc_incomming.empty()) debug_print("Model stopped with tool_calls yet returned None");
+
     if (!tc_incomming.empty()){
         ToolCallRequests tool_reqs;
         for (const auto& [_, tc] : tc_incomming){

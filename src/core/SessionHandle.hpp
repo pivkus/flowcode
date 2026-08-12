@@ -10,6 +10,7 @@
 
 #include "ConcurrentQueue.hpp"
 #include "Messages.hpp"
+#include "Log.hpp"
 
 using json = nlohmann::json;
 
