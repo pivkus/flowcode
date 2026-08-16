@@ -84,7 +84,7 @@ Effects Session::onTurnComplete(){
 }
 
 // TODO: distinquish different errors and support re-trying
-Effects Session::onRequestFailed(){
+Effects Session::onRequestFailed(std::string errmsg){
     if (state != State::AWAITING_MODEL) return {};
 
     auto aw = std::get<AwaitingModelData>(state_data);
@@ -93,7 +93,7 @@ Effects Session::onRequestFailed(){
     state = State::IDLE;
     state_data = std::monostate{};
 
-    return {};
+    return {EmitError{ .sid = session_id, .content = std::move(errmsg) }};
 }
 
 Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
@@ -154,8 +154,8 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
 
     state = State::TOOL_CALL_EXEC;
     state_data = ToolCallExecData {
-        .slots = std::move(slots),
         .turn_id = turn_id,
+        .slots = std::move(slots),
         .remaining = dispatched
     };
 

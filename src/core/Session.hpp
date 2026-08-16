@@ -36,13 +36,14 @@ struct EmitOutput { uint64_t sid; std::string content; };
 struct EmitReasoning { uint64_t sid; std::string content; };
 struct EmitToolStarted { uint64_t sid; size_t cid; std::string name; };
 struct EmitToolResult { uint64_t sid; size_t cid; bool ok; std::string content; };
+struct EmitError{ uint64_t sid; std::string content; };
 // Effects to the Executor pool
 struct ToolExecute { uint64_t sid; uint64_t tid; ResolvedCall call; };
 
 struct EffectNone { };
 
 using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished,
-                            ToolExecute, EmitToolStarted, EmitToolResult>;
+                            ToolExecute, EmitToolStarted, EmitToolResult, EmitError>;
 
 using Effects = std::vector<Effect>;
 
@@ -61,7 +62,7 @@ class Session {
         // Events from the network
         Effects onTextDelta(std::string tokens, TokensType type);
         Effects onTurnComplete();
-        Effects onRequestFailed();
+        Effects onRequestFailed(std::string errmsg);
         Effects onToolCallsRequest(ToolCallRequests tool_reqs);
 
         // Events from the tool pool

@@ -48,9 +48,20 @@ void SessionHandle::sendError(std::string errmsg){
     out_queue->enqueue(std::move(resp));
 }
 
+void SessionHandle::resetRequestState(){
+    tool_schemas.reset();
+    tc_incomming.clear();
+
+    saw_done = false;
+    finish_reason.clear();
+    native_finish_reason.clear();
+}
+
+
 
 void SessionHandle::prepareMessage(toNetworkMessage& request){
 
+    resetRequestState();
 
     // TODO: these thing should be passed in the request
     json_payload["model"] = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
@@ -205,13 +216,6 @@ void SessionHandle::completeMessage(){
         out_queue->enqueue(std::move(done_msg));
     }
 
-    tool_schemas.reset();
-    tc_incomming.clear();
-
-    saw_done = false;
-    finish_reason.clear();
-    native_finish_reason.clear();
-
 }
 
 CURL *SessionHandle::raw(){ return handle; }
@@ -325,9 +329,9 @@ json SessionHandle::buildJSONSchema(const ToolSchema& schema){
             {"description", schema.description},
             {"parameters", {
                 {"type", "object"},
-                {"properties", std::move(properties)}
-            }},
-            {"required", std::move(required)}
+                {"properties", std::move(properties)},
+                {"required", std::move(required)}
+            }}
         }}
     };
 }

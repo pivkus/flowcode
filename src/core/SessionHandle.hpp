@@ -47,6 +47,9 @@ class SessionHandle {
         // Returns an empty string if valid, otherwise a human-readable reason
         std::string validateToolCall(std::string& name, json& args);
 
+        // clears buffers/state in prepareMessage and on error paths
+        void resetRequestState();
+
         CURL *handle;
         struct curl_slist *headers;
 
@@ -70,7 +73,7 @@ class SessionHandle {
         // State for response termination
         std::string finish_reason;
         std::string native_finish_reason;
-        bool saw_done; // "data: [DONE]"" was emitted
+        bool saw_done = false; // "data: [DONE]"" was emitted
 
         
 };

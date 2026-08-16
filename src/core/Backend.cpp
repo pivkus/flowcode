@@ -193,6 +193,13 @@ void Backend::executeEffects(Effects&& effects){
             [&](ToolExecute& t){
                 toToolQueue.enqueue(std::move(t));
             },
+            [&](EmitError& e){
+                toUIQueue.enqueue({
+                    .session_id = e.sid,
+                    .kind = toUIMessage::Kind::ERROR,
+                    .content = std::move(e.content)
+                });
+            },
             [&](EffectNone& e){},
         }, e);
     }
@@ -245,7 +252,8 @@ void Backend::coordinatorWorker(std::stop_token stop){
                     break;
                 }
                 case fromNetworkMessage::Kind::ERROR: {
-                    effects = s.onRequestFailed();
+                    auto content = std::get<std::string>(msg->content);
+                    effects = s.onRequestFailed(std::move(content));
                     break;
                 }
                 case fromNetworkMessage::Kind::TOOL_CALL: {
