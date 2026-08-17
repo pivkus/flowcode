@@ -14,11 +14,15 @@ class Bridge : public QObject {
 
     signals:
         void tokensReceived(uint64_t id, const QString &content);
+        void reasoningReceived(uint64_t id, const QString &content);
+        void toolCallStarted(uint64_t id, const QString &name);
+        void toolCallFinished(uint64_t id, const QString &status);
         void responseFinished(uint64_t id);
         void responseError(uint64_t id, const QString &content);
 
     public slots:
-        void userPrompt(uint64_t id, const QString &content);
+        void userPromptSent(uint64_t id, const QString &content);
+        void sessionCreated(uint64_t id);
     private:
         void drainMessages();
 
