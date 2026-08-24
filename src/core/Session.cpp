@@ -1,6 +1,6 @@
 #include "Session.hpp"
 
-Session::Session(uint64_t id, SchemaMapPtr allowed_tools)
+Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 : session_id(id), tool_schemas(std::move(allowed_tools))
 {
     using enum Turn::Role;
@@ -114,13 +114,13 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
 
     history.push_back(std::move(turn));
 
-    std::vector<ToolCallExecData::Slot> slots;
+    std::vector<ToolCallExecData::Slot> slots_;
     Effects effects;
 
     uint64_t call_id = 0;
     size_t dispatched = 0;
     for (ToolCallRequest& req : tool_reqs){
-        slots.push_back({
+        slots_.push_back({
             .id = std::move(req.id),
             .name = req.name
         });
@@ -144,7 +144,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             });
             dispatched++;
         } else {
-            slots[call_id].result = {
+            slots_[call_id].result = {
                 .ok = false,
                 .content = "Error: " + req.error
             };
@@ -155,7 +155,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     state = State::TOOL_CALL_EXEC;
     state_data = ToolCallExecData {
         .turn_id = turn_id,
-        .slots = std::move(slots),
+        .slots_ = std::move(slots_),
         .remaining = dispatched
     };
 
@@ -175,7 +175,7 @@ void Session::finishToolCalls(Effects& effects){
     if (ts.remaining > 0) return;
 
     using enum Turn::Role;
-    for (auto& slot : ts.slots){
+    for (auto& slot : ts.slots_){
         TurnPtr turn = std::make_shared<Turn> (Turn {
             .turn_id = static_cast<uint64_t>(history.size()),
             .role = TOOL,
@@ -206,7 +206,7 @@ Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult r
     auto& ts = std::get<ToolCallExecData>(state_data);
     if (ts.turn_id != turn_id) return {}; // stale turn_id
 
-    if (ts.slots.size() <= call_id) return {}; // invalid call_id
+    if (ts.slots_.size() <= call_id) return {}; // invalid call_id
 
     Effects effects = {};
     effects.push_back(EmitToolResult {
@@ -217,7 +217,7 @@ Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult r
         .content = result.content
     });
 
-    ts.slots[call_id].result = std::move(result);
+    ts.slots_[call_id].result = std::move(result);
     ts.remaining--;
 
     if (ts.remaining == 0){

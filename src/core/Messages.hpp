@@ -6,6 +6,7 @@
 
 #include "Session.hpp"
 #include "Tools.hpp"
+#include "Uuid.hpp"
 
 struct toUIMessage {
     enum class Kind {
@@ -17,7 +18,7 @@ struct toUIMessage {
         ERROR
     };
 
-    uint64_t session_id;
+    Uuid session_id;
     Kind kind;
     std::string content;
 };
@@ -28,13 +29,13 @@ struct fromUIMessage {
         PROMPT_SUBMITED
     };
 
-    uint64_t session_id;
+    Uuid session_id;
     Kind kind;
     std::string content;
 };
 
 struct toNetworkMessage {
-    uint64_t session_id;
+    Uuid session_id;
     // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
     std::shared_ptr<TurnVec> turns;
     SchemaMapPtr tools;
@@ -49,13 +50,13 @@ struct fromNetworkMessage {
         ERROR
     };
 
-    uint64_t session_id;
+    Uuid session_id;
     Kind kind;
     std::variant<std::string, ToolCallRequests> content;
 };
 
 struct fromToolMessage {
-    uint64_t   session_id;
+    Uuid       session_id;
     uint64_t   turn_id;
     size_t     call_id;
     ToolResult result;

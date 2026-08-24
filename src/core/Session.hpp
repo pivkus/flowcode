@@ -6,6 +6,7 @@
 #include <variant>
 
 #include "Tools.hpp"
+#include "Uuid.hpp"
 
 
 
@@ -29,16 +30,16 @@ using TurnVec = std::vector<TurnPtr>;
 // Effects 
 
 // Effects to the Network
-struct SendRequest { uint64_t sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
+struct SendRequest { Uuid sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
 // Effects to the UI
-struct TurnFinished { uint64_t sid; };
-struct EmitOutput { uint64_t sid; std::string content; };
-struct EmitReasoning { uint64_t sid; std::string content; };
-struct EmitToolStarted { uint64_t sid; size_t cid; std::string name; };
-struct EmitToolResult { uint64_t sid; size_t cid; bool ok; std::string content; };
-struct EmitError{ uint64_t sid; std::string content; };
+struct TurnFinished { Uuid sid; };
+struct EmitOutput { Uuid sid; std::string content; };
+struct EmitReasoning { Uuid sid; std::string content; };
+struct EmitToolStarted { Uuid sid; size_t cid; std::string name; };
+struct EmitToolResult { Uuid sid; size_t cid; bool ok; std::string content; };
+struct EmitError{ Uuid sid; std::string content; };
 // Effects to the Executor pool
-struct ToolExecute { uint64_t sid; uint64_t tid; ResolvedCall call; };
+struct ToolExecute { Uuid sid; uint64_t tid; ResolvedCall call; };
 
 struct EffectNone { };
 
@@ -54,7 +55,7 @@ class Session {
 
     public:
 
-        Session(uint64_t id, SchemaMapPtr allowed_tools);
+        Session(Uuid id, SchemaMapPtr allowed_tools);
 
         // Commands from the UI
         Effects submitUserTurn(std::string content);
@@ -70,7 +71,7 @@ class Session {
 
         std::shared_ptr<TurnVec> snapshotHistory() const;
 
-        uint64_t session_id;
+        Uuid session_id;
 
     private:
 
@@ -86,7 +87,7 @@ class Session {
             };
 
             uint64_t turn_id;
-            std::vector<Slot> slots;
+            std::vector<Slot> slots_;
             size_t remaining;
         };
 

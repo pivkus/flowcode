@@ -4,7 +4,7 @@
 #include <QMetaObject>
 #include "core/Backend.hpp"
 
-
+#include "core/Uuid.hpp"
 
 class Bridge : public QObject {
     Q_OBJECT
@@ -13,16 +13,16 @@ class Bridge : public QObject {
         ~Bridge();
 
     signals:
-        void tokensReceived(uint64_t id, const QString &content);
-        void reasoningReceived(uint64_t id, const QString &content);
-        void toolCallStarted(uint64_t id, const QString &name);
-        void toolCallFinished(uint64_t id, const QString &status);
-        void responseFinished(uint64_t id);
-        void responseError(uint64_t id, const QString &content);
+        void tokensReceived(Uuid id, const QString &content);
+        void reasoningReceived(Uuid id, const QString &content);
+        void toolCallStarted(Uuid id, const QString &name);
+        void toolCallFinished(Uuid id, const QString &status);
+        void responseFinished(Uuid id);
+        void responseError(Uuid id, const QString &content);
 
     public slots:
-        void userPromptSent(uint64_t id, const QString &content);
-        void sessionCreated(uint64_t id);
+        void userPromptSent(Uuid id, const QString &content);
+        void sessionCreated(Uuid id);
     private:
         void drainMessages();
 

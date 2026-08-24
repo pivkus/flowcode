@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 
-SessionHandle::SessionHandle(uint64_t id, ConcurrentQueue<fromNetworkMessage> *queue)
+SessionHandle::SessionHandle(Uuid id, ConcurrentQueue<fromNetworkMessage> *queue)
 : session_id(id), out_queue(queue)
 {
 
@@ -219,7 +219,7 @@ void SessionHandle::completeMessage(){
 }
 
 CURL *SessionHandle::raw(){ return handle; }
-uint64_t SessionHandle::id(){ return session_id; }
+Uuid SessionHandle::id(){ return session_id; }
 
 size_t SessionHandle::writeTrampoline(char* p, size_t sz, size_t n, void* userdata){
     // userdata is a pointer to self, transfer writeback to a method

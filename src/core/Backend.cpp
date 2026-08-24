@@ -1,5 +1,6 @@
 #include "Backend.hpp"
 #include "SessionHandle.hpp"
+#include "Uuid.hpp"
 
 // TODO: is there an easier way to include all of them?
 #include "tools/BashTool.hpp"
@@ -62,7 +63,7 @@ Backend::~Backend(){
 
 void Backend::networkWorker(std::stop_token stop){
     // TODO: this will keep accummulating connections, manage this once I add persistant session storage
-    std::unordered_map<uint64_t, std::unique_ptr<SessionHandle>> se_cache;
+    std::unordered_map<Uuid, std::unique_ptr<SessionHandle>> se_cache;
 
     int still_running = 0;
     while (!stop.stop_requested()){
@@ -211,7 +212,7 @@ void Backend::coordinatorWorker(std::stop_token stop){
     tool_map["bash"] = tool_registry.get_schema("bash");
     SchemaMapPtr allowed_tools = std::make_shared<const SchemaMap>(std::move(tool_map));
 
-    std::unordered_map<uint64_t, Session> sessions;
+    std::unordered_map<Uuid, Session> sessions;
     while (!stop.stop_requested()){
 
 

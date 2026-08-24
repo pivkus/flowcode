@@ -3,7 +3,7 @@
 #include <QVBoxLayout>
 #include <QScrollBar>
 
-SessionWidget::SessionWidget(uint64_t id, QWidget *parent)
+SessionWidget::SessionWidget(Uuid id, QWidget *parent)
  : QWidget(parent), id(id)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
@@ -88,7 +88,7 @@ SessionManager::SessionManager(Bridge& bridge, QObject *parent)
     connect(&bridge, &Bridge::responseError, this, &SessionManager::routeError);
 }
 
-SessionWidget* SessionManager::createSession(uint64_t id){
+SessionWidget* SessionManager::createSession(Uuid id){
     SessionWidget *w = new SessionWidget(id);
     sessions.insert(id, w);
 
@@ -102,36 +102,36 @@ SessionWidget* SessionManager::createSession(uint64_t id){
 }
 
 // TODO: report invalid id
-void SessionManager::routeTokens(uint64_t id, const QString &content){
+void SessionManager::routeTokens(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendTokens(content);
     }
 }
-void SessionManager::routeReasoning(uint64_t id, const QString &content){
+void SessionManager::routeReasoning(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendReasoning(content);
     }
 }
 
-void SessionManager::routeToolStarted(uint64_t id, const QString &name){
+void SessionManager::routeToolStarted(Uuid id, const QString &name){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendToolStarted(name);
     }
 }
 
-void SessionManager::routeToolFinished(uint64_t id, const QString &status){
+void SessionManager::routeToolFinished(Uuid id, const QString &status){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendToolFinished(status);
     }
 }
 
-void SessionManager::routeFinish(uint64_t id){
+void SessionManager::routeFinish(Uuid id){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->finishResponse();
     }
 }
 
-void SessionManager::routeError(uint64_t id, const QString &content){
+void SessionManager::routeError(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->reportError(content);
     }

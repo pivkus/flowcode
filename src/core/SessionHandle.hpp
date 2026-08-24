@@ -11,12 +11,13 @@
 #include "ConcurrentQueue.hpp"
 #include "Messages.hpp"
 #include "Log.hpp"
+#include "Uuid.hpp"
 
 using json = nlohmann::json;
 
 class SessionHandle {
     public:
-        SessionHandle(uint64_t id, ConcurrentQueue<fromNetworkMessage> *queue);
+        SessionHandle(Uuid id, ConcurrentQueue<fromNetworkMessage> *queue);
         ~SessionHandle();
 
         // Delete copy/move operations so the object cant accidentaly change address in memory
@@ -31,7 +32,7 @@ class SessionHandle {
         void sendError(std::string errmsg);
 
         CURL *raw();
-        uint64_t id();
+        Uuid id();
 
     private:
         using enum fromNetworkMessage::Kind;
@@ -58,7 +59,7 @@ class SessionHandle {
         json json_payload;
         std::string str_payload;
 
-        uint64_t session_id;
+        Uuid session_id;
         ConcurrentQueue<fromNetworkMessage> *out_queue;
 
         // State for collecting incomming tool_call chunks
