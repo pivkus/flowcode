@@ -1,5 +1,6 @@
 #include "MainWindow.hpp"
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPushButton>
 
 #include "../core/Uuid.hpp" // TODO: this is temporary
@@ -11,15 +12,21 @@ MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
     setWindowTitle("Main Window");
     resize(800, 600);
 
-    QVBoxLayout *outer = new QVBoxLayout(this);
+    QHBoxLayout *root = new QHBoxLayout(this);
+    sidebar = new Sidebar(bridge, this);
+
+    QVBoxLayout *main_column = new QVBoxLayout;
 
     QPushButton *new_session_button = new QPushButton("New session", this);
     connect(new_session_button, &QPushButton::clicked, this, &MainWindow::newSession);
 
-    outer->addWidget(new_session_button);
-    outer->addLayout(layout, 1);
+    main_column->addWidget(new_session_button);
+    main_column->addLayout(layout, 1);
 
-    setLayout(outer);
+    root->addWidget(sidebar);
+    root->addLayout(main_column, 1);
+
+    setLayout(root);
 
     connect(this, &MainWindow::sessionCreated, &bridge, &Bridge::sessionCreated);
 }

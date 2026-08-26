@@ -8,6 +8,10 @@
 #include "Tools.hpp"
 #include "Uuid.hpp"
 
+using toUIContent = std::variant<
+    std::string,
+    std::vector<Uuid> 
+>;
 struct toUIMessage {
     enum class Kind {
         OUTPUT_TOKENS,
@@ -15,18 +19,21 @@ struct toUIMessage {
         TOOL_CALL_STARTED,
         TOOL_CALL_RESULT,
         TURN_FINISHED,
-        ERROR
+        ERROR,
+        LIST_SESSIONS_RES
     };
 
     Uuid session_id;
     Kind kind;
-    std::string content;
+    toUIContent content;
 };
+
 
 struct fromUIMessage {
     enum class Kind {
         CREATE_SESSION,
-        PROMPT_SUBMITED
+        PROMPT_SUBMITED,
+        LIST_SESSIONS
     };
 
     Uuid session_id;
@@ -53,6 +60,28 @@ struct fromNetworkMessage {
     Uuid session_id;
     Kind kind;
     std::variant<std::string, ToolCallRequests> content;
+};
+
+struct toIoMessage {
+    enum class Kind {
+        LIST_SESSIONS
+    };
+
+    Kind kind;
+    Uuid session_id;
+};
+
+using fromIoContent = std::variant<
+    std::vector<Uuid> 
+>;
+struct fromIoMessage {
+    enum class Kind {
+        LIST_SESSIONS_RES
+    };
+
+    Kind kind;
+    Uuid session_id;
+    fromIoContent content;
 };
 
 struct fromToolMessage {

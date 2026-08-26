@@ -5,6 +5,7 @@
 #include "core/Backend.hpp"
 
 #include "core/Uuid.hpp"
+#include "core/Log.hpp"
 
 class Bridge : public QObject {
     Q_OBJECT
@@ -20,9 +21,13 @@ class Bridge : public QObject {
         void responseFinished(Uuid id);
         void responseError(Uuid id, const QString &content);
 
+        void sessionListReceived(std::vector<Uuid> list);
+
     public slots:
         void userPromptSent(Uuid id, const QString &content);
         void sessionCreated(Uuid id);
+
+        void sessionsListRequested();
     private:
         void drainMessages();
 

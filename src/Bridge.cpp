@@ -19,32 +19,44 @@ void Bridge::drainMessages(){
 
     while (auto msg = backend.toUIQueue.dequeue()){
         switch (msg->kind){
-            case toUIMessage::Kind::TURN_FINISHED:
+            case toUIMessage::Kind::TURN_FINISHED: {
                 emit responseFinished(msg->session_id);
                 break;
-
-            case toUIMessage::Kind::ERROR:
-                emit responseError(msg->session_id, QString::fromStdString(msg->content));
+            }
+            case toUIMessage::Kind::ERROR: {
+                auto str_cnt = std::get<std::string>(msg->content);
+                emit responseError(msg->session_id, QString::fromStdString(str_cnt));
                 break;
-
-            case toUIMessage::Kind::OUTPUT_TOKENS:
-                emit tokensReceived(msg->session_id, QString::fromStdString(msg->content));
+            }
+            case toUIMessage::Kind::OUTPUT_TOKENS: {
+                auto str_cnt = std::get<std::string>(msg->content);
+                emit tokensReceived(msg->session_id, QString::fromStdString(str_cnt));
                 break;
-
-            case toUIMessage::Kind::REASONING_TOKENS:
-                emit reasoningReceived(msg->session_id, QString::fromStdString(msg->content));
+            }
+            case toUIMessage::Kind::REASONING_TOKENS: {
+                auto str_cnt = std::get<std::string>(msg->content);
+                emit reasoningReceived(msg->session_id, QString::fromStdString(str_cnt));
                 break;
-
-            case toUIMessage::Kind::TOOL_CALL_STARTED:
-                emit toolCallStarted(msg->session_id, QString::fromStdString(msg->content));
+            }
+            case toUIMessage::Kind::TOOL_CALL_STARTED: {
+                auto str_cnt = std::get<std::string>(msg->content);
+                emit toolCallStarted(msg->session_id, QString::fromStdString(str_cnt));
                 break;
-
-            case toUIMessage::Kind::TOOL_CALL_RESULT:
-                emit toolCallFinished(msg->session_id, QString::fromStdString(msg->content));
+            }
+            case toUIMessage::Kind::TOOL_CALL_RESULT: {
+                auto str_cnt = std::get<std::string>(msg->content);
+                emit toolCallFinished(msg->session_id, QString::fromStdString(str_cnt));
                 break;
-
-            default:
+            }
+            case toUIMessage::Kind::LIST_SESSIONS_RES: {
+                debug_print("Received LIST_SESSIONS_RES in bridge");
+                auto list = std::get<std::vector<Uuid>>(msg->content);
+                emit sessionListReceived(std::move(list));
                 break;
+            }
+            default: {
+                break;
+            }
         }
     }
 }
@@ -64,7 +76,15 @@ void Bridge::sessionCreated(Uuid id){
     fromUIMessage msg {
         .session_id = id,
         .kind = fromUIMessage::Kind::CREATE_SESSION,
-        .content = ""
+    };
+
+    backend.fromUIQueue.enqueue(std::move(msg));
+}
+
+void Bridge::sessionsListRequested(){
+    debug_print("sessionsListRequested");
+    fromUIMessage msg {
+        .kind = fromUIMessage::Kind::LIST_SESSIONS
     };
 
     backend.fromUIQueue.enqueue(std::move(msg));

@@ -29,6 +29,7 @@ class Backend {
         void networkWorker(std::stop_token stop);
         void coordinatorWorker(std::stop_token stop);
         void executorWorker(std::stop_token stop);
+        void ioWorker(std::stop_token stop);
 
         std::jthread network_thread;
 
@@ -40,12 +41,16 @@ class Backend {
         void executeEffects(Effects&& effects);
 
         ConcurrentQueue<toNetworkMessage> toNetworkQueue;
-        ConcurrentQueue<fromNetworkMessage> fromNetworkQueue;
+        ConcurrentQueue<fromNetworkMessage> fromNetworkQueue; 
 
         static constexpr int executor_pool_size = 4;
         ConcurrentQueue<ToolExecute> toToolQueue;
         ConcurrentQueue<fromToolMessage> fromToolQueue;
         std::vector<std::jthread> executor_threads;
+
+        std::jthread io_thread;
+        ConcurrentQueue<toIoMessage> toIoQueue;
+        ConcurrentQueue<fromIoMessage> fromIoQueue;
 
         // Global tool registry
         ToolRegistry tool_registry;
