@@ -19,6 +19,16 @@ std::shared_ptr<TurnVec> Session::snapshotHistory() const {
     return std::make_shared<TurnVec>(history);
 }
 
+void Session::persistPending(Effects& effects){
+    if (persisted_upto >= history.size()) return;
+
+    effects.push_back(PersistTurns{
+        .sid = session_id,
+        .turns = TurnVec(history.begin() + persisted_upto, history.end())
+    });
+    persisted_upto = history.size();
+}
+
 Effects Session::submitUserTurn(std::string content) {
     if (state != State::IDLE) return {};
 
@@ -30,7 +40,6 @@ Effects Session::submitUserTurn(std::string content) {
         .role = USER,
         .content = std::move(content)
     });
-
     history.push_back(std::move(turn));
 
     state = State::AWAITING_MODEL;
@@ -38,11 +47,14 @@ Effects Session::submitUserTurn(std::string content) {
         .incoming = ""
     };
 
-    return { SendRequest{
+    Effects effects = { SendRequest{
         .sid = session_id,
         .snapshot = snapshotHistory(),
         .tools = tool_schemas
-    }};
+    } };
+
+    persistPending(effects);
+    return effects;
 }
 
 Effects Session::onTextDelta(std::string tokens, TokensType type){
@@ -80,7 +92,10 @@ Effects Session::onTurnComplete(){
     state = State::IDLE;
     state_data = std::monostate{};
 
-    return { TurnFinished{ .sid = session_id } };
+    Effects effects = { TurnFinished{ .sid = session_id } };
+    persistPending(effects);
+
+    return effects;
 }
 
 // TODO: distinquish different errors and support re-trying
@@ -111,7 +126,6 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             .tool_calls = tool_reqs // Does a copy right now
         }
     });
-
     history.push_back(std::move(turn));
 
     std::vector<ToolCallExecData::Slot> slots_;
@@ -165,6 +179,8 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
         finishToolCalls(effects);
     } 
 
+    // finishToolCalls might call persistPending but it is idempotent, so its fine to call twice
+    persistPending(effects);
     return effects;
 }
 
@@ -198,6 +214,8 @@ void Session::finishToolCalls(Effects& effects){
     state_data = AwaitingModelData {
         .incoming = ""
     };
+
+    persistPending(effects);
 }
 
 Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult result){

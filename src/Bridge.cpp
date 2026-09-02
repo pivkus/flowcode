@@ -49,7 +49,6 @@ void Bridge::drainMessages(){
                 break;
             }
             case toUIMessage::Kind::LIST_SESSIONS_RES: {
-                debug_print("Received LIST_SESSIONS_RES in bridge");
                 auto list = std::get<std::vector<Uuid>>(msg->content);
                 emit sessionListReceived(std::move(list));
                 break;
@@ -82,7 +81,6 @@ void Bridge::sessionCreated(Uuid id){
 }
 
 void Bridge::sessionsListRequested(){
-    debug_print("sessionsListRequested");
     fromUIMessage msg {
         .kind = fromUIMessage::Kind::LIST_SESSIONS
     };

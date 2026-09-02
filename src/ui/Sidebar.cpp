@@ -58,7 +58,6 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
     menu_list = new QListWidget(this);
     menu_list->setItemDelegate(new MenuItemDelegate(menu_list));
     
-
     auto *create_button = new QPushButton("Create Session", this);
 
     root->addWidget(create_button, 1);
@@ -70,7 +69,6 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
 }
 
 void Sidebar::renderSessionList(std::vector<Uuid> list){
-    debug_print("renderSessionList got {} uuid", list.size());
 
     for (const auto& uuid : list){
         // this is temporary until I add a proper name to sessions

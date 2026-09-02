@@ -1,7 +1,6 @@
 #include "Backend.hpp"
 #include "SessionHandle.hpp"
 #include "Uuid.hpp"
-#include "Paths.hpp"
 
 // TODO: is there an easier way to include all of them?
 #include "tools/BashTool.hpp"
@@ -40,8 +39,6 @@ Backend::Backend(){
     network_thread = std::jthread([this](std::stop_token stop){ networkWorker(stop); });
     coordinator_thread = std::jthread([this](std::stop_token stop){ coordinatorWorker(stop); });
 
-    io_thread = std::jthread([this](std::stop_token stop){ ioWorker(stop); });
-
     executor_threads.reserve(executor_pool_size);
     for (int i = 0; i < executor_pool_size; ++i){
         executor_threads.emplace_back([this](std::stop_token stop){ executorWorker(stop); });
@@ -51,7 +48,6 @@ Backend::Backend(){
 Backend::~Backend(){
     network_thread.request_stop();
     coordinator_thread.request_stop();
-    io_thread.request_stop();
 
     for (auto& t : executor_threads) t.request_stop();
     for (auto& t : executor_threads) t.join();
@@ -60,7 +56,6 @@ Backend::~Backend(){
     // jthread would only join in its own destructor, after multi is already cleaned up below
     network_thread.join();
     coordinator_thread.join();
-    io_thread.join();
 
     curl_multi_cleanup(multi);
     curl_global_cleanup();
@@ -144,42 +139,6 @@ void Backend::executorWorker(std::stop_token stop){
     }
 }
 
-void Backend::ioWorker(std::stop_token stop){
-
-    while (!stop.stop_requested()){
-        auto msg = toIoQueue.wait_dequeue(stop);
-        if (!msg) continue;
-        
-        switch (msg->kind){
-            case toIoMessage::Kind::LIST_SESSIONS: {
-                namespace fs = std::filesystem;
-                const auto& path = paths::sessionsDir();
-                // creates the flowcode/sessions directories if they don't exist yet
-                // no-op otherwise
-                fs::create_directories(path);
-
-                std::vector<Uuid> res{};
-                std::ranges::for_each(fs::directory_iterator(path),
-                    [&res](const auto& dir){
-                        auto uuid = Uuid::from_string(dir.path().filename().string());
-                        if (!uuid) return;
-                        res.push_back(*uuid);
-                    }
-                );
-                
-                debug_print("ioThread processing list got {}", res.size());
-
-                fromIoQueue.enqueue(fromIoMessage {
-                    .kind = fromIoMessage::Kind::LIST_SESSIONS_RES,
-                    .content = std::move(res)
-                });
-            }
-        }
-
-
-    }
-}
-
 ToolResult bash_tool_testing(const json& args, std::stop_token stop){
     return ToolResult {
         .ok = false,
@@ -243,6 +202,13 @@ void Backend::executeEffects(Effects&& effects){
                     .content = std::move(e.content)
                 });
             },
+            [&](PersistTurns& t){
+                toIoQueue.enqueue({
+                    .session_id = t.sid,
+                    .kind = toIoMessage::Kind::PERSIST_TURNS,
+                    .content = std::move(t.turns)
+                });
+            },
             [&](EffectNone& e){},
         }, e);
     }
@@ -272,7 +238,6 @@ void Backend::coordinatorWorker(std::stop_token stop){
                     break;
                 }
                 case LIST_SESSIONS: {
-                    debug_print("LIST_SESSIONS msg got");
                     toIoQueue.enqueue(toIoMessage { 
                         .kind = toIoMessage::Kind::LIST_SESSIONS
                     });
@@ -324,13 +289,18 @@ void Backend::coordinatorWorker(std::stop_token stop){
         while (auto msg = fromIoQueue.dequeue()){
             switch (msg->kind){
                 case fromIoMessage::Kind::LIST_SESSIONS_RES: {
-                    debug_print("Received LIST_SESSIONS_RES in backend");
+
                     auto list = std::get<std::vector<Uuid>>(msg->content);
 
                     toUIQueue.enqueue(toUIMessage {
                         .kind = toUIMessage::Kind::LIST_SESSIONS_RES,
                         .content = std::move(list)
                     });
+                    break;
+                }
+                case fromIoMessage::Kind::ERROR: {
+                    // TODO: handle the error here, maybe retry the listing
+                    break;
                 }
             }
         }

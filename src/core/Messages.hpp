@@ -62,21 +62,26 @@ struct fromNetworkMessage {
     std::variant<std::string, ToolCallRequests> content;
 };
 
+using toIoContent = TurnVec;
 struct toIoMessage {
     enum class Kind {
-        LIST_SESSIONS
+        LIST_SESSIONS,
+        PERSIST_TURNS
     };
 
     Kind kind;
     Uuid session_id;
+    toIoContent content;
 };
 
 using fromIoContent = std::variant<
+    std::string,
     std::vector<Uuid> 
 >;
 struct fromIoMessage {
     enum class Kind {
-        LIST_SESSIONS_RES
+        LIST_SESSIONS_RES,
+        ERROR
     };
 
     Kind kind;

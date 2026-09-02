@@ -40,11 +40,13 @@ struct EmitToolResult { Uuid sid; size_t cid; bool ok; std::string content; };
 struct EmitError{ Uuid sid; std::string content; };
 // Effects to the Executor pool
 struct ToolExecute { Uuid sid; uint64_t tid; ResolvedCall call; };
+// Effects to the Io thread
+struct PersistTurns { Uuid sid; TurnVec turns; };
 
 struct EffectNone { };
 
 using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished,
-                            ToolExecute, EmitToolStarted, EmitToolResult, EmitError>;
+                            ToolExecute, EmitToolStarted, EmitToolResult, EmitError, PersistTurns>;
 
 using Effects = std::vector<Effect>;
 
@@ -93,6 +95,11 @@ class Session {
 
         // Appends the tool turns and goes back to AWAITING_MODEL
         void finishToolCalls(Effects& effects);
+
+        // Tracks how many turns have been persisted (saved) to disc
+        size_t persisted_upto = 0;
+        void persistPending(Effects& effects);
+
 
         enum class State {IDLE, AWAITING_MODEL, TOOL_CALL_EXEC};
         State state = State::IDLE;

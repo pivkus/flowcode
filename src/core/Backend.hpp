@@ -9,6 +9,7 @@
 #include <stop_token>
 
 #include "ConcurrentQueue.hpp"
+#include "IoWorker.hpp"
 #include "Messages.hpp"
 #include "Session.hpp"
 #include "Tools.hpp"
@@ -29,7 +30,6 @@ class Backend {
         void networkWorker(std::stop_token stop);
         void coordinatorWorker(std::stop_token stop);
         void executorWorker(std::stop_token stop);
-        void ioWorker(std::stop_token stop);
 
         std::jthread network_thread;
 
@@ -48,9 +48,10 @@ class Backend {
         ConcurrentQueue<fromToolMessage> fromToolQueue;
         std::vector<std::jthread> executor_threads;
 
-        std::jthread io_thread;
         ConcurrentQueue<toIoMessage> toIoQueue;
         ConcurrentQueue<fromIoMessage> fromIoQueue;
+        // declared after its queues so it is destroyed (and joined) before them
+        IoWorker io_worker{toIoQueue, fromIoQueue};
 
         // Global tool registry
         ToolRegistry tool_registry;

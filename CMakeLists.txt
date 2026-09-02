@@ -32,6 +32,7 @@ add_executable(flowcode
     src/main.cpp
     src/Bridge.cpp
     src/core/Backend.cpp
+    src/core/IoWorker.cpp
     src/core/Session.cpp
     src/core/SessionHandle.cpp
     src/core/Tools.cpp

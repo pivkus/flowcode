@@ -71,6 +71,7 @@ struct Uuid {
 
     std::string to_string() const;
     friend bool operator==(const Uuid&, const Uuid&) noexcept = default;
+    friend auto operator<=>(const Uuid&, const Uuid&) = default;
 
 private:
     void fill_bytes(uint64_t val, size_t nbytes, size_t shift){
