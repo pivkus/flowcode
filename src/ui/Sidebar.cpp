@@ -57,6 +57,15 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
 
     menu_list = new QListWidget(this);
     menu_list->setItemDelegate(new MenuItemDelegate(menu_list));
+
+    // Qt keeps track of "current" item, changes it on click, on insertion of first item it will became
+    // current and get loaded - this is good right now
+    connect(menu_list, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *cur){
+        if (!cur) return;
+        // Load the Uuid from the list item
+        auto id = cur->data(Qt::UserRole).value<Uuid>();
+        this->bridge.sessionLoadRequested(id);
+    });
     
     auto *create_button = new QPushButton("Create Session", this);
 
@@ -75,6 +84,8 @@ void Sidebar::renderSessionList(std::vector<Uuid> list){
         std::string str_uuid = uuid.to_string();
         auto name = QString::fromStdString(str_uuid.substr(str_uuid.length() - 6));
 
-        new QListWidgetItem(name, menu_list);
+        auto *item = new QListWidgetItem(name, menu_list);
+        // Each menu bar item will store its uuid value
+        item->setData(Qt::UserRole, QVariant::fromValue(uuid)); 
     }
 }

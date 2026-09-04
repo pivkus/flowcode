@@ -39,13 +39,11 @@ SessionHandle::~SessionHandle(){
 
 void SessionHandle::sendError(std::string errmsg){
     debug_print("{}", errmsg);
-    fromNetworkMessage resp {
-        .session_id = session_id,
-        .kind = ERROR,
-        .content = std::move(errmsg)
-    };
 
-    out_queue->enqueue(std::move(resp));
+    out_queue->enqueue(SessionError{
+        .sid = session_id,
+        .msg = std::move(errmsg)
+    });
 }
 
 void SessionHandle::resetRequestState(){
@@ -69,7 +67,7 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
     json_payload["messages"] = json::array();
     json_payload["reasoning"] = { {"enabled", true} };
 
-    serializeTurnsToJSON(*request.turns);
+    serializeTurnsToJSON(*request.snapshot);
     
     if (request.tools && !request.tools->empty()){
         tool_schemas = std::move(request.tools);
@@ -202,18 +200,13 @@ void SessionHandle::completeMessage(){
             tool_reqs.push_back(std::move(req));
         }
 
-        fromNetworkMessage tool_msg {
-            .session_id = session_id,
-            .kind = TOOL_CALL,
-            .content = std::move(tool_reqs)
-        };
-        out_queue->enqueue(std::move(tool_msg));
+        out_queue->enqueue(ToolCallsMade {
+            .sid = session_id,
+            .calls = std::move(tool_reqs)
+        });
+
     } else {
-        fromNetworkMessage done_msg {
-            .session_id = session_id,
-            .kind = TURN_FINISHED,
-        };
-        out_queue->enqueue(std::move(done_msg));
+        out_queue->enqueue(TurnFinished { .sid = session_id });
     }
 
 }
@@ -382,28 +375,21 @@ void SessionHandle::handleEvent(std::string_view event){
         auto content_it = delta_it->find("content");
         if (content_it != delta_it->end() && content_it->is_string()){
             std::string tokens = std::move(std::move(content_it->get_ref<std::string&>()));
-            
 
-            fromNetworkMessage resp {
-                .session_id = session_id,
-                .kind = OUTPUT_TOKENS,
-                .content = std::move(tokens)
-            };
-
-            out_queue->enqueue(std::move(resp));
+            out_queue->enqueue(OutputTokensDelta {
+                .sid = session_id,
+                .delta = std::move(tokens)
+            });
         }
 
         auto reasoning_it = delta_it->find("reasoning");
         if (reasoning_it != delta_it->end() && reasoning_it->is_string()){
             std::string tokens = std::move(reasoning_it->get_ref<std::string&>());
 
-            fromNetworkMessage resp {
-                .session_id = session_id,
-                .kind = REASONING_TOKENS,
-                .content = std::move(tokens)
-            };
-
-            out_queue->enqueue(std::move(resp));
+            out_queue->enqueue(ReasoningTokensDelta {
+                .sid = session_id,
+                .delta = std::move(tokens)
+            });
         }
 
         auto toolcall_it = delta_it->find("tool_calls");

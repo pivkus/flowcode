@@ -2,10 +2,14 @@
 #include <QObject>
 #include <QString>
 #include <QMetaObject>
+#include <QMetaType>
 #include "core/Backend.hpp"
 
 #include "core/Uuid.hpp"
 #include "core/Log.hpp"
+
+// This is needed to use the Uuid type as a data item in qt
+Q_DECLARE_METATYPE(Uuid)
 
 class Bridge : public QObject {
     Q_OBJECT
@@ -17,7 +21,7 @@ class Bridge : public QObject {
         void tokensReceived(Uuid id, const QString &content);
         void reasoningReceived(Uuid id, const QString &content);
         void toolCallStarted(Uuid id, const QString &name);
-        void toolCallFinished(Uuid id, const QString &status);
+        void toolCallFinished(Uuid id, bool status);
         void responseFinished(Uuid id);
         void responseError(Uuid id, const QString &content);
 
@@ -28,6 +32,7 @@ class Bridge : public QObject {
         void sessionCreated(Uuid id);
 
         void sessionsListRequested();
+        void sessionLoadRequested(Uuid id);
     private:
         void drainMessages();
 

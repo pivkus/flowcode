@@ -8,6 +8,7 @@
 #include "Messages.hpp"
 #include "Uuid.hpp"
 
+
 // Owns the io thread: all blocking filesystem work for session persistence.
 class IoWorker {
     public:
@@ -18,8 +19,10 @@ class IoWorker {
         void run(std::stop_token stop);
 
         void listSessions();
+        void loadSession(Uuid sid);
+
         void persistTurns(Uuid sid, TurnVec turns);
-        void reportError(Uuid sid, std::string content);
+        std::string getJSONLine(TurnPtr turn);
 
         ConcurrentQueue<toIoMessage>& in;
         ConcurrentQueue<fromIoMessage>& out;

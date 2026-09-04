@@ -9,11 +9,13 @@
 #include <reproc++/reproc.hpp>
 #include <reproc++/drain.hpp>
 
-#define BASH_DEFAULT_TIMEOUT 120
-#define BASH_MAX_TIMEOUT 600
-
-#define BASH_MAX_OUTPUT_CHARS 30000
-#define BASH_TRUNCATION_MSG "TOOL SYSTEM WARNING: command output was truncated!"
+namespace {
+    constexpr int bash_default_timeout = 120;
+    constexpr int bash_max_timeout =  600;
+    constexpr int bash_max_output_chars =  600;
+    constexpr std::string_view bash_truncation_msg = "TOOL SYSTEM WARNING: command output was truncated!";
+    
+}
 
 class CappedStringSink {
     std::string& out_str;
@@ -74,11 +76,11 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     json cmd_obj = args.at("command");
     std::string& cmd = cmd_obj.get_ref<std::string&>();
 
-    int timeout_sec = BASH_DEFAULT_TIMEOUT;
+    int timeout_sec = bash_default_timeout;
     if (args.contains("timeout")){
         int provided_timeout = args.at("timeout").get<int>();
         if (provided_timeout > 0){
-            timeout_sec = provided_timeout < BASH_MAX_TIMEOUT ? provided_timeout : BASH_MAX_TIMEOUT;
+            timeout_sec = provided_timeout < bash_max_timeout ? provided_timeout : bash_max_timeout;
         }
     }
 
@@ -133,9 +135,9 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     std::string stderr_str;
     
     bool out_trunc = false;
-    CappedStringSink out_sink(stdout_str, BASH_MAX_OUTPUT_CHARS, out_trunc);
+    CappedStringSink out_sink(stdout_str, bash_max_output_chars, out_trunc);
     bool err_trunc = false;
-    CappedStringSink err_sink(stderr_str, BASH_MAX_OUTPUT_CHARS, err_trunc);
+    CappedStringSink err_sink(stderr_str, bash_max_output_chars, err_trunc);
 
     // Collect output and error streams into strings, will block until streams return EOF
     auto d_ec = reproc::drain(process, out_sink, err_sink);
@@ -160,8 +162,8 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     // Any failure path will populate the result object
     if (!result.ok) return result;
 
-    if (out_trunc) stdout_str.append(BASH_TRUNCATION_MSG);
-    if (err_trunc) stderr_str.append(BASH_TRUNCATION_MSG);
+    if (out_trunc) stdout_str.append(bash_truncation_msg);
+    if (err_trunc) stderr_str.append(bash_truncation_msg);
     
     json json_response;
     json_response["exit code"] = exit_code;

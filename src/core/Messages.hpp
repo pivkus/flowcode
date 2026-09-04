@@ -4,90 +4,104 @@
 #include <variant>
 #include <string>
 
-#include "Session.hpp"
 #include "Tools.hpp"
 #include "Uuid.hpp"
 
-using toUIContent = std::variant<
-    std::string,
-    std::vector<Uuid> 
+struct AssistantContent  { std::string text; ToolCallRequests tool_calls; };
+struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
+
+using TurnContent = std::variant<std::string, AssistantContent, ToolResultContent>;
+
+struct Turn {
+    enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
+    uint64_t turn_id;
+    Role role;
+    TurnContent content;
+};
+
+using TurnPtr = std::shared_ptr<const Turn>;
+using TurnVec = std::vector<TurnPtr>;
+
+struct PersistTurns         { Uuid sid; TurnVec turns; };
+
+struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
+struct OutputTokensDelta    { Uuid sid; std::string delta; };
+struct ReasoningTokensDelta { Uuid sid; std::string delta; };
+struct TurnFinished         { Uuid sid; };
+
+struct PromptSubmission     { Uuid sid; std::string prompt; };
+struct SessionCreation      { Uuid sid; };
+
+struct ListSessionsRes      { std::vector<Uuid> uuids; };
+struct ListSessionsReq      {};
+
+struct LoadSessionReq       { Uuid sid; };
+
+// Tools
+struct ToolCallsMade        { Uuid sid; ToolCallRequests calls; };
+struct ToolExecute          { Uuid sid; uint64_t tid; ResolvedCall call; };
+struct EmitToolStarted      { Uuid sid; size_t cid; std::string name; };
+struct EmitToolResult       { Uuid sid; size_t cid; bool ok; std::string content; };
+
+// Errors
+struct GlobalError          { std::string msg; };
+struct SessionError         { Uuid sid; std::string msg; };
+
+struct EffectNone { };
+
+using Effect = std::variant<
+    EffectNone,
+    SendRequest, 
+    OutputTokensDelta, 
+    ReasoningTokensDelta, 
+    TurnFinished,
+    ToolExecute, 
+    EmitToolStarted, 
+    EmitToolResult, 
+    SessionError, 
+    PersistTurns
 >;
-struct toUIMessage {
-    enum class Kind {
-        OUTPUT_TOKENS,
-        REASONING_TOKENS,
-        TOOL_CALL_STARTED,
-        TOOL_CALL_RESULT,
-        TURN_FINISHED,
-        ERROR,
-        LIST_SESSIONS_RES
-    };
-
-    Uuid session_id;
-    Kind kind;
-    toUIContent content;
-};
+using Effects = std::vector<Effect>;
 
 
-struct fromUIMessage {
-    enum class Kind {
-        CREATE_SESSION,
-        PROMPT_SUBMITED,
-        LIST_SESSIONS
-    };
-
-    Uuid session_id;
-    Kind kind;
-    std::string content;
-};
-
-struct toNetworkMessage {
-    Uuid session_id;
-    // shared_ptr is not really needed yet but will allow multiple consumers of the snapshot in the future
-    std::shared_ptr<TurnVec> turns;
-    SchemaMapPtr tools;
-};
-
-struct fromNetworkMessage {
-    enum class Kind {
-        OUTPUT_TOKENS,
-        REASONING_TOKENS,
-        TURN_FINISHED,
-        TOOL_CALL,
-        ERROR
-    };
-
-    Uuid session_id;
-    Kind kind;
-    std::variant<std::string, ToolCallRequests> content;
-};
-
-using toIoContent = TurnVec;
-struct toIoMessage {
-    enum class Kind {
-        LIST_SESSIONS,
-        PERSIST_TURNS
-    };
-
-    Kind kind;
-    Uuid session_id;
-    toIoContent content;
-};
-
-using fromIoContent = std::variant<
-    std::string,
-    std::vector<Uuid> 
+using toUIMessage = std::variant<
+    OutputTokensDelta, 
+    ReasoningTokensDelta, 
+    EmitToolStarted,
+    EmitToolResult, 
+    TurnFinished, 
+    SessionError, 
+    ListSessionsRes
 >;
-struct fromIoMessage {
-    enum class Kind {
-        LIST_SESSIONS_RES,
-        ERROR
-    };
 
-    Kind kind;
-    Uuid session_id;
-    fromIoContent content;
-};
+using fromUIMessage = std::variant<
+    SessionCreation, 
+    PromptSubmission, 
+    ListSessionsReq,
+    LoadSessionReq
+>;
+
+using fromNetworkMessage = std::variant<
+    OutputTokensDelta, 
+    ReasoningTokensDelta, 
+    TurnFinished, 
+    ToolCallsMade, 
+    SessionError
+>;
+
+using toIoMessage = std::variant<
+    ListSessionsReq,
+    PersistTurns,
+    LoadSessionReq
+>;
+
+using fromIoMessage = std::variant<
+    ListSessionsRes,
+    GlobalError,
+    SessionError
+>;
+
+using toNetworkMessage = SendRequest;
 
 struct fromToolMessage {
     Uuid       session_id;
@@ -95,3 +109,4 @@ struct fromToolMessage {
     size_t     call_id;
     ToolResult result;
 };
+

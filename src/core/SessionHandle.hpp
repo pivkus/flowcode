@@ -35,7 +35,6 @@ class SessionHandle {
         Uuid id();
 
     private:
-        using enum fromNetworkMessage::Kind;
 
         static size_t writeTrampoline(char* p, size_t sz, size_t n, void* userdata);
         size_t writeback(const char* data, size_t len);

@@ -17,7 +17,7 @@ class SessionWidget : public QWidget {
         void appendTokens(const QString &content);
         void appendReasoning(const QString &content);
         void appendToolStarted(const QString &name);
-        void appendToolFinished(const QString &status);
+        void appendToolFinished(bool status);
         void finishResponse();
         void reportError(const QString &content);
     signals:
@@ -49,7 +49,7 @@ class SessionManager : public QObject {
         void routeTokens(Uuid id, const QString &content);
         void routeReasoning(Uuid id, const QString &content);
         void routeToolStarted(Uuid id, const QString &name);
-        void routeToolFinished(Uuid id, const QString &status);
+        void routeToolFinished(Uuid id, bool status);
         void routeError(Uuid id, const QString &content);
         void routeFinish(Uuid id);
     private:

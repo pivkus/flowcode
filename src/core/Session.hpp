@@ -7,49 +7,7 @@
 
 #include "Tools.hpp"
 #include "Uuid.hpp"
-
-
-
-struct AssistantContent { std::string text; ToolCallRequests tool_calls; };
-struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
-
-using TurnContent = std::variant<std::string, AssistantContent, ToolResultContent>;
-
-struct Turn {
-    enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
-    uint64_t turn_id;
-    Role role;
-    TurnContent content;
-};
-
-using TurnPtr = std::shared_ptr<const Turn>;
-using TurnVec = std::vector<TurnPtr>;
-
-
-
-// Effects 
-
-// Effects to the Network
-struct SendRequest { Uuid sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
-// Effects to the UI
-struct TurnFinished { Uuid sid; };
-struct EmitOutput { Uuid sid; std::string content; };
-struct EmitReasoning { Uuid sid; std::string content; };
-struct EmitToolStarted { Uuid sid; size_t cid; std::string name; };
-struct EmitToolResult { Uuid sid; size_t cid; bool ok; std::string content; };
-struct EmitError{ Uuid sid; std::string content; };
-// Effects to the Executor pool
-struct ToolExecute { Uuid sid; uint64_t tid; ResolvedCall call; };
-// Effects to the Io thread
-struct PersistTurns { Uuid sid; TurnVec turns; };
-
-struct EffectNone { };
-
-using Effect = std::variant<EffectNone, SendRequest, EmitOutput, EmitReasoning, TurnFinished,
-                            ToolExecute, EmitToolStarted, EmitToolResult, EmitError, PersistTurns>;
-
-using Effects = std::vector<Effect>;
-
+#include "Messages.hpp"
 
 enum class TokensType{OUTPUT, REASONING};
 

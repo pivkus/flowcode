@@ -54,8 +54,8 @@ void SessionWidget::appendToolStarted(const QString &name){
     appendStyled("\n[tool started: " + name + "]\n", tool_fmt);
 }
 
-void SessionWidget::appendToolFinished(const QString &status){
-    appendStyled("[tool finished: " + status + "]\n", tool_fmt);
+void SessionWidget::appendToolFinished(bool status){
+    appendStyled("[tool finished: " + QString::fromStdString(std::format("{}", status)) + "]\n", tool_fmt);
 }
 
 void SessionWidget::finishResponse(){
@@ -119,7 +119,7 @@ void SessionManager::routeToolStarted(Uuid id, const QString &name){
     }
 }
 
-void SessionManager::routeToolFinished(Uuid id, const QString &status){
+void SessionManager::routeToolFinished(Uuid id, bool status){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendToolFinished(status);
     }

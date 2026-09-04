@@ -65,10 +65,10 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
 
     if (type == TokensType::OUTPUT){
         aw->incoming.append(tokens);
-        return { EmitOutput{ .sid = session_id, .content = std::move(tokens) } };
+        return { OutputTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     } else {
         // Reasoning tokens are not stored in session history
-        return { EmitReasoning{ .sid = session_id, .content = std::move(tokens) } };
+        return { ReasoningTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     }
 
 }
@@ -108,7 +108,7 @@ Effects Session::onRequestFailed(std::string errmsg){
     state = State::IDLE;
     state_data = std::monostate{};
 
-    return {EmitError{ .sid = session_id, .content = std::move(errmsg) }};
+    return { SessionError{ .sid = session_id, .msg = std::move(errmsg) } };
 }
 
 Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){

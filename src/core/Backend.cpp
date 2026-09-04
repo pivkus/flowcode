@@ -71,20 +71,18 @@ void Backend::networkWorker(std::stop_token stop){
 
         while (auto req = toNetworkQueue.dequeue()){
             // Will insert a null unique_ptr if id not in map
-            std::unique_ptr<SessionHandle>& slot = se_cache[req->session_id];
+            std::unique_ptr<SessionHandle>& slot = se_cache[req->sid];
             if (!slot){
                 try {
-                    slot = std::make_unique<SessionHandle>(req->session_id, &fromNetworkQueue);
+                    slot = std::make_unique<SessionHandle>(req->sid, &fromNetworkQueue);
                 } catch (const std::exception &e){
                     // e.g. missing API key; report to the UI instead of crashing the worker
-                    using enum fromNetworkMessage::Kind;
 
-                    fromNetworkQueue.enqueue({
-                        .session_id = req->session_id,
-                        .kind = ERROR,
-                        .content = e.what()
+                    fromNetworkQueue.enqueue(SessionError {
+                        .sid = req->sid,
+                        .msg = e.what()
                     });
-                    se_cache.erase(req->session_id);
+                    se_cache.erase(req->sid);
                     continue;
                 }
             }
@@ -150,65 +148,16 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 void Backend::executeEffects(Effects&& effects){
     for (auto& e : effects){
         std::visit(overloaded{
-            [&](SendRequest& r){
-                toNetworkQueue.enqueue({
-                    .session_id = r.sid, 
-                    .turns = std::move(r.snapshot),
-                    .tools = std::move(r.tools) 
-                });
-            },
-            [&](EmitOutput& o){
-                toUIQueue.enqueue({
-                    .session_id = o.sid,
-                    .kind = toUIMessage::Kind::OUTPUT_TOKENS,
-                    .content = std::move(o.content)
-                });
-            },
-            [&](EmitReasoning& r){
-                toUIQueue.enqueue({
-                    .session_id = r.sid,
-                    .kind = toUIMessage::Kind::REASONING_TOKENS,
-                    .content = std::move(r.content)
-                });
-            },
-            [&](EmitToolStarted& t){
-                toUIQueue.enqueue({
-                    .session_id = t.sid,
-                    .kind = toUIMessage::Kind::TOOL_CALL_STARTED,
-                    .content = std::move(t.name)
-                });
-            },
-            [&](EmitToolResult& t){
-                toUIQueue.enqueue({
-                    .session_id = t.sid,
-                    .kind = toUIMessage::Kind::TOOL_CALL_RESULT,
-                    .content = t.ok ? "ok" : "failed"
-                });
-            },
-            [&](TurnFinished& t){
-                toUIQueue.enqueue({
-                    .session_id = t.sid,
-                    .kind = toUIMessage::Kind::TURN_FINISHED,
-                    .content = ""
-                });
-            },
-            [&](ToolExecute& t){
-                toToolQueue.enqueue(std::move(t));
-            },
-            [&](EmitError& e){
-                toUIQueue.enqueue({
-                    .session_id = e.sid,
-                    .kind = toUIMessage::Kind::ERROR,
-                    .content = std::move(e.content)
-                });
-            },
-            [&](PersistTurns& t){
-                toIoQueue.enqueue({
-                    .session_id = t.sid,
-                    .kind = toIoMessage::Kind::PERSIST_TURNS,
-                    .content = std::move(t.turns)
-                });
-            },
+            [&](SendRequest& r){ toNetworkQueue.enqueue(std::move(r)); },
+            [&](OutputTokensDelta& o){ toUIQueue.enqueue(std::move(o)); },
+            [&](ReasoningTokensDelta& r){ toUIQueue.enqueue(std::move(r)); },
+            [&](EmitToolStarted& t){ toUIQueue.enqueue(std::move(t)); },
+            [&](EmitToolResult& t){ toUIQueue.enqueue(std::move(t)); },
+            [&](TurnFinished& t){ toUIQueue.enqueue(std::move(t)); },
+            [&](ToolExecute& t){ toToolQueue.enqueue(std::move(t)); },
+            [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); },
+
+            [&](PersistTurns& t){ toIoQueue.enqueue(std::move(t)); },
             [&](EffectNone& e){},
         }, e);
     }
@@ -225,57 +174,51 @@ void Backend::coordinatorWorker(std::stop_token stop){
 
 
         while (auto msg = fromUIQueue.dequeue()){
-            switch (msg->kind){
-                using enum fromUIMessage::Kind;
-                
-                case CREATE_SESSION:
-                    sessions.try_emplace(msg->session_id, msg->session_id, allowed_tools);
-                    break;
-                case PROMPT_SUBMITED: {
-                    Session& s = sessions.at(msg->session_id);
-                    Effects effects = s.submitUserTurn(std::move(msg->content));
+
+            std::visit(overloaded{
+                [&](SessionCreation& sc){
+                    sessions.try_emplace(sc.sid, sc.sid, allowed_tools);
+                },
+                [&](PromptSubmission& ps){
+                    Session& s = sessions.at(ps.sid);
+                    Effects effects = s.submitUserTurn(std::move(ps.prompt));
                     executeEffects(std::move(effects));
-                    break;
+                },
+                [&](ListSessionsReq& ls){
+                    toIoQueue.enqueue(std::move(ls));
+                },
+                [&](LoadSessionReq& ls){
+                    toIoQueue.enqueue(std::move(ls));
                 }
-                case LIST_SESSIONS: {
-                    toIoQueue.enqueue(toIoMessage { 
-                        .kind = toIoMessage::Kind::LIST_SESSIONS
-                    });
-                    break;
-                }
-            }
+            }, *msg);
         }
 
         while (auto msg = fromNetworkQueue.dequeue()){
-            Session& s = sessions.at(msg->session_id);
-            Effects effects;
 
-            switch (msg->kind){
-    
-                case fromNetworkMessage::Kind::OUTPUT_TOKENS: {
-                    auto content = std::get<std::string>(msg->content);
-                    effects = s.onTextDelta(std::move(content), TokensType::OUTPUT);
-                    break;
-                }
-                case fromNetworkMessage::Kind::REASONING_TOKENS: {
-                    auto content = std::get<std::string>(msg->content); 
-                    effects = s.onTextDelta(std::move(content), TokensType::REASONING);
-                    break;
-                }
-                case fromNetworkMessage::Kind::TURN_FINISHED: {
+            Effects effects;
+            std::visit(overloaded{
+                [&](OutputTokensDelta& ot){
+                    Session& s = sessions.at(ot.sid);
+                    effects = s.onTextDelta(std::move(ot.delta), TokensType::OUTPUT);
+                },
+                [&](ReasoningTokensDelta& rt){
+                    Session& s = sessions.at(rt.sid);
+                    effects = s.onTextDelta(std::move(rt.delta), TokensType::REASONING);
+                },
+                [&](TurnFinished& tf){
+                    Session& s = sessions.at(tf.sid);
                     effects = s.onTurnComplete();
-                    break;
+                },
+                [&](SessionError& e){
+                    Session& s = sessions.at(e.sid);
+                    effects = s.onRequestFailed(std::move(e.msg));
+                },
+                [&](ToolCallsMade& tcs){
+                    Session& s = sessions.at(tcs.sid);
+                    effects = s.onToolCallsRequest(std::move(tcs.calls));
                 }
-                case fromNetworkMessage::Kind::ERROR: {
-                    auto content = std::get<std::string>(msg->content);
-                    effects = s.onRequestFailed(std::move(content));
-                    break;
-                }
-                case fromNetworkMessage::Kind::TOOL_CALL: {
-                    auto content = std::get<ToolCallRequests>(msg->content);
-                    effects = s.onToolCallsRequest(std::move(content));
-                }
-            }
+            }, *msg);
+
 
             executeEffects(std::move(effects));
         }
@@ -287,22 +230,12 @@ void Backend::coordinatorWorker(std::stop_token stop){
         }
 
         while (auto msg = fromIoQueue.dequeue()){
-            switch (msg->kind){
-                case fromIoMessage::Kind::LIST_SESSIONS_RES: {
-
-                    auto list = std::get<std::vector<Uuid>>(msg->content);
-
-                    toUIQueue.enqueue(toUIMessage {
-                        .kind = toUIMessage::Kind::LIST_SESSIONS_RES,
-                        .content = std::move(list)
-                    });
-                    break;
-                }
-                case fromIoMessage::Kind::ERROR: {
-                    // TODO: handle the error here, maybe retry the listing
-                    break;
-                }
-            }
+            std::visit(overloaded {
+                [&](ListSessionsRes& ls){ toUIQueue.enqueue(std::move(ls)); },
+                [&](GlobalError& e){ // TODO: handle the error here, maybe retry the listing
+                },
+                [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); }
+            }, *msg);
         }
 
         // periodically sleep, if there is work or stop wakeup
