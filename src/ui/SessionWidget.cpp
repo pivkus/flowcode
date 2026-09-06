@@ -2,6 +2,7 @@
 
 #include <QVBoxLayout>
 #include <QScrollBar>
+#include <QString>
 
 SessionWidget::SessionWidget(Uuid id, QWidget *parent)
  : QWidget(parent), id(id)
@@ -77,61 +78,89 @@ void SessionWidget::submitPrompt(){
     input->clear();
 }
 
-SessionManager::SessionManager(Bridge& bridge, QObject *parent)
-: QObject(parent), bridge(bridge)
-{
-    connect(&bridge, &Bridge::tokensReceived, this, &SessionManager::routeTokens);
-    connect(&bridge, &Bridge::reasoningReceived, this, &SessionManager::routeReasoning);
-    connect(&bridge, &Bridge::toolCallStarted, this, &SessionManager::routeToolStarted);
-    connect(&bridge, &Bridge::toolCallFinished, this, &SessionManager::routeToolFinished);
-    connect(&bridge, &Bridge::responseFinished, this, &SessionManager::routeFinish);
-    connect(&bridge, &Bridge::responseError, this, &SessionManager::routeError);
+void SessionWidget::renderSession(const TurnVec& history){
+    for (const auto& turn : history){
+        using enum Turn::Role;
+        switch (turn->role){
+            case USER: {
+                // TODO: this is ugly maybe switch turn to a variant instead of tagged struct
+                auto cnt = std::get<std::string>(turn->content);
+                appendStyled("\n>> " + QString::fromStdString(cnt) + "\n", prompt_fmt);
+                break;
+            }
+            case ASSISTANT: {
+                auto cnt = std::get<AssistantContent>(turn->content);
+                // TODO: tool calls
+                appendTokens(QString::fromStdString(cnt.text));
+                break;
+            }
+            case SYSTEM: { break; };
+            case TOOL: {
+                auto cnt = std::get<ToolResultContent>(turn->content);
+                appendToolFinished(cnt.ok);
+                break;
+            };
+        }
+    }
 }
 
-SessionWidget* SessionManager::createSession(Uuid id){
+SessionStack::SessionStack(Bridge& bridge, QWidget *parent)
+: QStackedWidget(parent), bridge(bridge)
+{
+    connect(&bridge, &Bridge::tokensReceived, this, &SessionStack::routeTokens);
+    connect(&bridge, &Bridge::reasoningReceived, this, &SessionStack::routeReasoning);
+    connect(&bridge, &Bridge::toolCallStarted, this, &SessionStack::routeToolStarted);
+    connect(&bridge, &Bridge::toolCallFinished, this, &SessionStack::routeToolFinished);
+    connect(&bridge, &Bridge::responseFinished, this, &SessionStack::routeFinish);
+    connect(&bridge, &Bridge::responseError, this, &SessionStack::routeError);
+}
+
+SessionWidget* SessionStack::create(Uuid id, const TurnVec& history){
     SessionWidget *w = new SessionWidget(id);
     sessions.insert(id, w);
 
-    connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPromptSent);
-    // Widget will be removed from map automatically
-    connect(w, &QObject::destroyed, this, [this, id]{
-        sessions.remove(id);
-    });
+    addWidget(w); // Adds it to the internal QStackedWidget list
 
+    connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPromptSent);
     return w;
 }
 
+SessionWidget* SessionStack::get(Uuid id){
+    return sessions.value(id, nullptr);
+}
+
+
 // TODO: report invalid id
-void SessionManager::routeTokens(Uuid id, const QString &content){
+void SessionStack::routeTokens(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendTokens(content);
     }
 }
-void SessionManager::routeReasoning(Uuid id, const QString &content){
+void SessionStack::routeReasoning(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendReasoning(content);
     }
 }
 
-void SessionManager::routeToolStarted(Uuid id, const QString &name){
+void SessionStack::routeToolStarted(Uuid id, const QString &name){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendToolStarted(name);
     }
 }
 
-void SessionManager::routeToolFinished(Uuid id, bool status){
+void SessionStack::routeToolFinished(Uuid id, bool status){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->appendToolFinished(status);
     }
 }
 
-void SessionManager::routeFinish(Uuid id){
+void SessionStack::routeFinish(Uuid id){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->finishResponse();
     }
 }
 
-void SessionManager::routeError(Uuid id, const QString &content){
+void SessionStack::routeError(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->reportError(content);
     }

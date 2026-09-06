@@ -16,12 +16,14 @@ class MainWindow : public QWidget {
         void sessionCreated(Uuid id);
     private slots:
         void newSession();
+        void focusSession(Uuid id);
+        void onSessionLoaded(Uuid id, TurnVec history);
     private:
-        // This blank widget is be displayed as an empty session when "New session" is pressed
-        // or on app startup as the default focus - may not have a id until backend sends it
-        SessionWidget *blank = nullptr;
+        Bridge& bridge;
 
-        SessionManager manager;
+        SessionStack *stack = nullptr;
         Sidebar *sidebar = nullptr;
-        QHBoxLayout *layout = nullptr;
+
+        // Id of the session waiting to get loaded from disk to focus it
+        std::optional<Uuid> pending_focus;
 };

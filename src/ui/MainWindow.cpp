@@ -7,24 +7,22 @@
 
 
 MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
- : QWidget(parent), manager(bridge, this), layout(new QHBoxLayout)
-{
+ : QWidget(parent), bridge(bridge) {
     setWindowTitle("Main Window");
     resize(800, 600);
     
+    connect(&bridge, &Bridge::sessionLoadReceived, this, &MainWindow::onSessionLoaded);
+    
     QHBoxLayout *root = new QHBoxLayout(this);
+    
     sidebar = new Sidebar(bridge, this);
-
-    QVBoxLayout *main_column = new QVBoxLayout;
-
-    QPushButton *new_session_button = new QPushButton("New session", this);
-    connect(new_session_button, &QPushButton::clicked, this, &MainWindow::newSession);
-
-    main_column->addWidget(new_session_button);
-    main_column->addLayout(layout, 1);
+    connect(sidebar, &Sidebar::sessionSelected, this, &MainWindow::focusSession);
+    connect(sidebar, &Sidebar::newSession, this, &MainWindow::newSession);
+    
+    stack = new SessionStack(bridge, this);
 
     root->addWidget(sidebar);
-    root->addLayout(main_column, 1);
+    root->addWidget(stack, 1);
 
     setLayout(root);
 
@@ -34,9 +32,33 @@ MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
 void MainWindow::newSession()
 {
     // TODO: session_ids should be generated on the backend
-    Uuid session_id = Uuid::generate_v7();
+    Uuid id = Uuid::generate_v7();
 
-    SessionWidget* w = manager.createSession(session_id);
-    layout->addWidget(w, 1);
-    emit sessionCreated(session_id);
+    SessionWidget* w = stack->create(id);
+    sidebar->addSelectSession(id);
+    pending_focus.reset();
+    emit sessionCreated(id);
+}
+
+void MainWindow::focusSession(Uuid id){
+    if (SessionWidget* w = stack->get(id)){
+        stack->setCurrentWidget(w);
+        pending_focus.reset();
+        return;
+    }
+
+    pending_focus = id;
+    bridge.sessionLoadRequested(id);
+}
+
+void MainWindow::onSessionLoaded(Uuid id, TurnVec history){
+    if (stack->get(id)) return;
+
+    SessionWidget* w = stack->create(id);
+    w->renderSession(history);
+
+    if (pending_focus == id){
+        stack->setCurrentWidget(w);
+        pending_focus.reset();
+    }
 }

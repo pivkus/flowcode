@@ -5,6 +5,7 @@
 #include <QPlainTextEdit>
 #include <QLineEdit>
 #include <QTextCharFormat>
+#include <QStackedWidget>
 
 #include "../Bridge.hpp"
 #include "../core/Uuid.hpp"
@@ -14,6 +15,9 @@ class SessionWidget : public QWidget {
     Q_OBJECT
     public:
         SessionWidget(Uuid id, QWidget *parent = nullptr);
+
+        void renderSession(const TurnVec& history);
+
         void appendTokens(const QString &content);
         void appendReasoning(const QString &content);
         void appendToolStarted(const QString &name);
@@ -39,12 +43,16 @@ class SessionWidget : public QWidget {
         QTextCharFormat error_fmt;
 };
 
-class SessionManager : public QObject {
+
+class SessionStack : public QStackedWidget {
     Q_OBJECT
     public:
-        SessionManager(Bridge& bridge, QObject *parent = nullptr);
-        SessionWidget* createSession(Uuid id);
-    
+        SessionStack(Bridge& bridge, QWidget *parent = nullptr);
+
+        SessionWidget* create(Uuid id, const TurnVec& history = {});
+        SessionWidget* get(Uuid id);
+
+
     private slots:
         void routeTokens(Uuid id, const QString &content);
         void routeReasoning(Uuid id, const QString &content);
@@ -53,6 +61,8 @@ class SessionManager : public QObject {
         void routeError(Uuid id, const QString &content);
         void routeFinish(Uuid id);
     private:
+        // Adds the Uuid to SessionWidget mapping to QStackedWidget
         QHash<Uuid, SessionWidget*> sessions;
+    
         Bridge& bridge;
 };

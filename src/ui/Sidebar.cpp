@@ -3,6 +3,7 @@
 #include <QPushButton>
 #include <QString>
 
+
 namespace {
     constexpr int menuItemPadding = 6; // px
     constexpr int menuItemBottomGap = 4;
@@ -64,10 +65,11 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
         if (!cur) return;
         // Load the Uuid from the list item
         auto id = cur->data(Qt::UserRole).value<Uuid>();
-        this->bridge.sessionLoadRequested(id);
+        emit this->sessionSelected(id);
     });
     
     auto *create_button = new QPushButton("Create Session", this);
+    connect(create_button, &QPushButton::clicked, this, &Sidebar::newSession);
 
     root->addWidget(create_button, 1);
     root->addWidget(menu_list, 9);
@@ -77,15 +79,23 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
     emit sessionsListRequested();
 }
 
+QListWidgetItem* Sidebar::addSession(Uuid id){
+    // this is temporary until I add a proper name to sessions
+    std::string str_uuid = id.to_string();
+    auto name = QString::fromStdString(str_uuid.substr(str_uuid.length() - 6));
+
+    auto *item = new QListWidgetItem(name, menu_list);
+    // Each menu bar item will store its uuid value
+    item->setData(Qt::UserRole, QVariant::fromValue(id));
+    return item;
+}
+
+void Sidebar::addSelectSession(Uuid id){ 
+    auto *item = addSession(id);
+    menu_list->setCurrentItem(item);
+}
+
 void Sidebar::renderSessionList(std::vector<Uuid> list){
 
-    for (const auto& uuid : list){
-        // this is temporary until I add a proper name to sessions
-        std::string str_uuid = uuid.to_string();
-        auto name = QString::fromStdString(str_uuid.substr(str_uuid.length() - 6));
-
-        auto *item = new QListWidgetItem(name, menu_list);
-        // Each menu bar item will store its uuid value
-        item->setData(Qt::UserRole, QVariant::fromValue(uuid)); 
-    }
+    for (const auto& uuid : list){ addSession(uuid); }
 }
