@@ -8,6 +8,7 @@
 #include "Tools.hpp"
 #include "Uuid.hpp"
 #include "Messages.hpp"
+#include "Log.hpp"
 
 enum class TokensType{OUTPUT, REASONING};
 
@@ -16,6 +17,7 @@ class Session {
     public:
 
         Session(Uuid id, SchemaMapPtr allowed_tools);
+        Session(Uuid id, SchemaMapPtr allowed_tools, TurnVec history);
 
         // Commands from the UI
         Effects submitUserTurn(std::string content);

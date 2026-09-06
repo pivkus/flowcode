@@ -29,6 +29,7 @@ void Bridge::drainMessages(){
             [&](SessionError& e){ emit responseError(e.sid, QString::fromStdString(e.msg)); },
             [&](TurnFinished& tf){ emit responseFinished(tf.sid); },
             [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids)); },
+            [&](LoadSessionRes& ls){ emit sessionLoadReceived(ls.sid, std::move(ls.history)); },
         }, *msg);
     }
 }

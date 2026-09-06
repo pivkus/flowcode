@@ -232,6 +232,10 @@ void Backend::coordinatorWorker(std::stop_token stop){
         while (auto msg = fromIoQueue.dequeue()){
             std::visit(overloaded {
                 [&](ListSessionsRes& ls){ toUIQueue.enqueue(std::move(ls)); },
+                [&](LoadSessionRes& ls){
+                    sessions.try_emplace(ls.sid, ls.sid, allowed_tools, ls.history); 
+                    toUIQueue.enqueue(std::move(ls));
+                },
                 [&](GlobalError& e){ // TODO: handle the error here, maybe retry the listing
                 },
                 [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); }

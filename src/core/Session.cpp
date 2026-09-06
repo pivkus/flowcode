@@ -15,6 +15,14 @@ Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 
 }
 
+Session::Session(Uuid id, SchemaMapPtr allowed_tools, TurnVec history)
+: session_id(id), tool_schemas(std::move(allowed_tools)), history(std::move(history))
+{
+    state = State::IDLE;
+    state_data = std::monostate{};
+    persisted_upto = this->history.size();
+}
+
 std::shared_ptr<TurnVec> Session::snapshotHistory() const {
     return std::make_shared<TurnVec>(history);
 }

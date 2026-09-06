@@ -19,7 +19,10 @@ class IoWorker {
         void run(std::stop_token stop);
 
         void listSessions();
+    
         void loadSession(Uuid sid);
+        TurnPtr tryParseLine(std::string& line);
+
 
         void persistTurns(Uuid sid, TurnVec turns);
         std::string getJSONLine(TurnPtr turn);

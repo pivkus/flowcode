@@ -36,6 +36,7 @@ struct ListSessionsRes      { std::vector<Uuid> uuids; };
 struct ListSessionsReq      {};
 
 struct LoadSessionReq       { Uuid sid; };
+struct LoadSessionRes       { Uuid sid; TurnVec history; };
 
 // Tools
 struct ToolCallsMade        { Uuid sid; ToolCallRequests calls; };
@@ -71,7 +72,8 @@ using toUIMessage = std::variant<
     EmitToolResult, 
     TurnFinished, 
     SessionError, 
-    ListSessionsRes
+    ListSessionsRes,
+    LoadSessionRes
 >;
 
 using fromUIMessage = std::variant<
@@ -97,6 +99,7 @@ using toIoMessage = std::variant<
 
 using fromIoMessage = std::variant<
     ListSessionsRes,
+    LoadSessionRes,
     GlobalError,
     SessionError
 >;

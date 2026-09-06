@@ -11,7 +11,7 @@ MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
 {
     setWindowTitle("Main Window");
     resize(800, 600);
-
+    
     QHBoxLayout *root = new QHBoxLayout(this);
     sidebar = new Sidebar(bridge, this);
 

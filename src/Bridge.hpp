@@ -26,6 +26,7 @@ class Bridge : public QObject {
         void responseError(Uuid id, const QString &content);
 
         void sessionListReceived(std::vector<Uuid> list);
+        void sessionLoadReceived(Uuid id, TurnVec history);
 
     public slots:
         void userPromptSent(Uuid id, const QString &content);
