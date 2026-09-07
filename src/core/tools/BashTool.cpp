@@ -12,7 +12,7 @@
 namespace {
     constexpr int bash_default_timeout = 120;
     constexpr int bash_max_timeout =  600;
-    constexpr int bash_max_output_chars =  600;
+    constexpr int bash_max_output_chars =  30000;
     constexpr std::string_view bash_truncation_msg = "TOOL SYSTEM WARNING: command output was truncated!";
     
 }
