@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <string>
 #include <string_view>
 #include <curl/curl.h>
@@ -10,7 +9,6 @@
 
 #include "ConcurrentQueue.hpp"
 #include "Messages.hpp"
-#include "Log.hpp"
 #include "Uuid.hpp"
 
 using json = nlohmann::json;
@@ -74,6 +72,7 @@ class SessionHandle {
         std::string finish_reason;
         std::string native_finish_reason;
         bool saw_done = false; // "data: [DONE]"" was emitted
+        bool request_failed = false;
 
         
 };

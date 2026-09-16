@@ -1,12 +1,13 @@
 #pragma once
 #include <QObject>
 #include <QString>
-#include <QMetaObject>
 #include <QMetaType>
-#include "core/Backend.hpp"
+#include "core/Messages.hpp"
+#include <vector>
 
 #include "core/Uuid.hpp"
-#include "core/Log.hpp"
+
+class Backend;
 
 // This is needed to use the Uuid type as a data item in qt
 Q_DECLARE_METATYPE(Uuid)
@@ -20,8 +21,8 @@ class Bridge : public QObject {
     signals:
         void tokensReceived(Uuid id, const QString &content);
         void reasoningReceived(Uuid id, const QString &content);
-        void toolCallStarted(Uuid id, const QString &name);
-        void toolCallFinished(Uuid id, bool status);
+        void toolCallStarted(Uuid id, ToolCallId tcid, const QString &name);
+        void toolCallFinished(Uuid id, ToolCallId tcid, bool status);
         void responseFinished(Uuid id);
         void responseError(Uuid id, const QString &content);
 

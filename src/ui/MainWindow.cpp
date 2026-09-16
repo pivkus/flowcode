@@ -1,7 +1,7 @@
 #include "MainWindow.hpp"
-#include <QVBoxLayout>
+#include "SessionWidget.hpp"
+#include "Sidebar.hpp"
 #include <QHBoxLayout>
-#include <QPushButton>
 
 #include "../core/Uuid.hpp" // TODO: this is temporary
 

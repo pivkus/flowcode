@@ -1,5 +1,6 @@
 #include "Sidebar.hpp"
 
+#include <QPainter>
 #include <QPushButton>
 #include <QString>
 

@@ -1,6 +1,14 @@
 #pragma once
 
 #include <array>
+#include <compare>
+#include <cstddef>
+#include <cstdint>
+#include <format>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <tuple>
 #include <cstring>
 #include <chrono>
 #include <random>

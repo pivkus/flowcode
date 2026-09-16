@@ -1,70 +1,42 @@
 #include "SessionWidget.hpp"
+#include "ChatInterface.hpp"
+#include "../Bridge.hpp"
 
+#include <QLineEdit>
+#include <QScrollArea>
 #include <QVBoxLayout>
-#include <QScrollBar>
 #include <QString>
+#include <string>
+#include <variant>
 
 SessionWidget::SessionWidget(Uuid id, QWidget *parent)
  : QWidget(parent), id(id)
 {
-    QVBoxLayout *layout = new QVBoxLayout(this);
+    QVBoxLayout *main_layout = new QVBoxLayout(this);
 
-    text_box = new QPlainTextEdit(this);
-    text_box->setReadOnly(true);
+    input_field = new QLineEdit(this);
+    chat = new ChatInterface(this);
 
-    input = new QLineEdit(this);
-    
-    layout->addWidget(text_box, 8);
-    layout->addWidget(input, 2);
+    chat_area = new QScrollArea(this);
+    chat_area->setWidgetResizable(true);
+    chat_area->setWidget(chat);
 
-    setLayout(layout);
+    main_layout->addWidget(chat_area, 8);
+    main_layout->addWidget(input_field, 2);
 
-    connect(input, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
+    setLayout(main_layout);
 
-    reasoning_fmt.setForeground(QColor(128, 128, 128));
-    tool_fmt.setForeground(QColor(0, 150, 170));
-    prompt_fmt.setForeground(QColor(80, 160, 80));
+    connect(input_field, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
 
-    error_fmt.setForeground(QColor(200, 60, 60));
-}
-
-void SessionWidget::appendStyled(const QString &content, const QTextCharFormat &fmt){
-
-    QScrollBar *v_bar = text_box->verticalScrollBar();
-    bool is_at_bottom = (v_bar->value() >= v_bar->maximum() - 10);
-
-    QTextCursor cursor(text_box->document());
-    cursor.movePosition(QTextCursor::End);
-    cursor.insertText(content, fmt);
-
-    if (is_at_bottom) v_bar->setValue(v_bar->maximum());
-}
-
-// TODO: there is a lot of functions that just react slightly differently based on
-// the type of text appended - maybe its worth factoring out to a single "append" with a switch case
-// on the type - consider
-void SessionWidget::appendTokens(const QString &content){
-    appendStyled(content, output_fmt);
-}
-
-void SessionWidget::appendReasoning(const QString &content){
-    appendStyled(content, reasoning_fmt);
-}
-
-void SessionWidget::appendToolStarted(const QString &name){
-    appendStyled("\n[tool started: " + name + "]\n", tool_fmt);
-}
-
-void SessionWidget::appendToolFinished(bool status){
-    appendStyled("[tool finished: " + QString::fromStdString(std::format("{}", status)) + "]\n", tool_fmt);
 }
 
 void SessionWidget::finishResponse(){
+    chat->finishTurn();
     active_response = false;
 }
 
 void SessionWidget::reportError(const QString &content){
-    appendStyled("\nERROR: " + content + "\n", error_fmt);
+    chat->appendError(content);
     active_response = false;
 }
 
@@ -72,10 +44,11 @@ void SessionWidget::submitPrompt(){
     if (active_response) return;
     active_response = true;
 
-    const QString prompt = input->text();
-    appendStyled("\n>> " + prompt + "\n", prompt_fmt);
+    const QString prompt = input_field->text();
+    chat->appendPrompt(prompt);
+
     emit userPromptSent(id, prompt);
-    input->clear();
+    input_field->clear();
 }
 
 void SessionWidget::renderSession(const TurnVec& history){
@@ -85,19 +58,19 @@ void SessionWidget::renderSession(const TurnVec& history){
             case USER: {
                 // TODO: this is ugly maybe switch turn to a variant instead of tagged struct
                 auto cnt = std::get<std::string>(turn->content);
-                appendStyled("\n>> " + QString::fromStdString(cnt) + "\n", prompt_fmt);
+                chat->appendPrompt(QString::fromStdString(cnt));
                 break;
             }
             case ASSISTANT: {
                 auto cnt = std::get<AssistantContent>(turn->content);
                 // TODO: tool calls
-                appendTokens(QString::fromStdString(cnt.text));
+                chat->appendText(QString::fromStdString(cnt.text));
                 break;
             }
             case SYSTEM: { break; };
             case TOOL: {
                 auto cnt = std::get<ToolResultContent>(turn->content);
-                appendToolFinished(cnt.ok);
+                // appendToolFinished(cnt.ok);
                 break;
             };
         }
@@ -133,24 +106,24 @@ SessionWidget* SessionStack::get(Uuid id){
 // TODO: report invalid id
 void SessionStack::routeTokens(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
-        w->appendTokens(content);
+        w->chat->appendText(content);
     }
 }
 void SessionStack::routeReasoning(Uuid id, const QString &content){
     if (SessionWidget* w = sessions.value(id, nullptr)){
-        w->appendReasoning(content);
+        w->chat->appendReasoning(content);
     }
 }
 
-void SessionStack::routeToolStarted(Uuid id, const QString &name){
+void SessionStack::routeToolStarted(Uuid id, ToolCallId tcid, const QString &name){
     if (SessionWidget* w = sessions.value(id, nullptr)){
-        w->appendToolStarted(name);
+        w->chat->appendToolStarted(name, tcid);
     }
 }
 
-void SessionStack::routeToolFinished(Uuid id, bool status){
+void SessionStack::routeToolFinished(Uuid id, ToolCallId tcid, bool status){
     if (SessionWidget* w = sessions.value(id, nullptr)){
-        w->appendToolFinished(status);
+        w->chat->appendToolFinished(tcid, status);
     }
 }
 

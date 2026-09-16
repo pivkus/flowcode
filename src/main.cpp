@@ -1,19 +1,7 @@
-#include <print>
-#include <optional>
-#include <string>
-#include <iostream>
-#include <cstdint>
-#include <chrono>
-#include <thread>
-
-#include <poll.h>
-#include <unistd.h>
-
 #include "core/Backend.hpp"
 #include "core/EnvFile.hpp"
 
 #include <QApplication>
-#include <QWidget>
 #include "ui/MainWindow.hpp"
 #include "Bridge.hpp"
 

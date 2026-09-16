@@ -1,11 +1,22 @@
 #pragma once
+#include <compare>
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 #include <memory>
 #include <variant>
 #include <string>
+#include <compare>
 
 #include "Tools.hpp"
 #include "Uuid.hpp"
+
+struct ToolCallId {
+    uint64_t tid;
+    uint64_t cid;
+
+    auto operator<=>(const ToolCallId&) const = default;
+};
 
 struct AssistantContent  { std::string text; ToolCallRequests tool_calls; };
 struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
@@ -41,8 +52,8 @@ struct LoadSessionRes       { Uuid sid; TurnVec history; };
 // Tools
 struct ToolCallsMade        { Uuid sid; ToolCallRequests calls; };
 struct ToolExecute          { Uuid sid; uint64_t tid; ResolvedCall call; };
-struct EmitToolStarted      { Uuid sid; size_t cid; std::string name; };
-struct EmitToolResult       { Uuid sid; size_t cid; bool ok; std::string content; };
+struct EmitToolStarted      { Uuid sid; ToolCallId tcid; std::string name; };
+struct EmitToolResult       { Uuid sid; ToolCallId tcid; bool ok; std::string content; };
 
 // Errors
 struct GlobalError          { std::string msg; };

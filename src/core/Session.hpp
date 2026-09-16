@@ -2,13 +2,11 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <print>
 #include <variant>
 
 #include "Tools.hpp"
 #include "Uuid.hpp"
 #include "Messages.hpp"
-#include "Log.hpp"
 
 enum class TokensType{OUTPUT, REASONING};
 

@@ -1,5 +1,7 @@
 #include "Session.hpp"
 
+#include <utility>
+
 Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 : session_id(id), tool_schemas(std::move(allowed_tools))
 {
@@ -71,6 +73,8 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
     auto* aw = std::get_if<AwaitingModelData>(&state_data);
     if (!aw) return {};
 
+    if (tokens.empty()) return {};
+
     if (type == TokensType::OUTPUT){
         aw->incoming.append(tokens);
         return { OutputTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
@@ -139,7 +143,9 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     std::vector<ToolCallExecData::Slot> slots_;
     Effects effects;
 
-    uint64_t call_id = 0;
+    // call_id can be used as a unique id of a tool call in one batch - the model can't make another request
+    // until all in this batch are evaluated (result or failed)
+    uint64_t call_id = 0; 
     size_t dispatched = 0;
     for (ToolCallRequest& req : tool_reqs){
         slots_.push_back({
@@ -161,7 +167,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
             });
             effects.push_back(EmitToolStarted {
                 .sid = session_id,
-                .cid = call_id,
+                .tcid = ToolCallId { .tid = turn_id, .cid = call_id },
                 .name = req.name
             });
             dispatched++;
@@ -237,7 +243,7 @@ Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult r
     Effects effects = {};
     effects.push_back(EmitToolResult {
         .sid = session_id,
-        .cid = call_id,
+        .tcid = ToolCallId { .tid = turn_id, .cid = call_id },
         .ok = result.ok,
         // copy here is expected
         .content = result.content

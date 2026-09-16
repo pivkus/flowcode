@@ -1,5 +1,9 @@
 #include "Bridge.hpp"
-#include <print>
+#include "core/Backend.hpp"
+
+#include <QMetaObject>
+#include <utility>
+#include <variant>
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
@@ -24,8 +28,8 @@ void Bridge::drainMessages(){
         std::visit(overloaded{
             [&](OutputTokensDelta& ot){ emit tokensReceived(ot.sid, QString::fromStdString(ot.delta)); },
             [&](ReasoningTokensDelta& rt){ emit reasoningReceived(rt.sid, QString::fromStdString(rt.delta)); },
-            [&](EmitToolStarted& ts){ emit toolCallStarted(ts.sid, QString::fromStdString(ts.name)); },
-            [&](EmitToolResult& tr){ emit toolCallFinished(tr.sid, tr.ok); },
+            [&](EmitToolStarted& ts){ emit toolCallStarted(ts.sid, ts.tcid ,QString::fromStdString(ts.name)); },
+            [&](EmitToolResult& tr){ emit toolCallFinished(tr.sid, tr.tcid, tr.ok); },
             [&](SessionError& e){ emit responseError(e.sid, QString::fromStdString(e.msg)); },
             [&](TurnFinished& tf){ emit responseFinished(tf.sid); },
             [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids)); },

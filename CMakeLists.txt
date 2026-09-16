@@ -39,6 +39,7 @@ add_executable(flowcode
     src/core/tools/BashTool.cpp
     src/ui/MainWindow.cpp
     src/ui/SessionWidget.cpp
+    src/ui/ChatInterface.cpp
     src/ui/Sidebar.cpp
 )
 target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets reproc++)

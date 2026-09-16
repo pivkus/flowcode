@@ -1,7 +1,9 @@
 #include "SessionHandle.hpp"
 
 
-#include <cassert>
+#include "Log.hpp"
+
+#include <utility>
 #include <cstdlib>
 #include <stdexcept>
 
@@ -38,7 +40,11 @@ SessionHandle::~SessionHandle(){
 }
 
 void SessionHandle::sendError(std::string errmsg){
+    if (request_failed) return;
+    request_failed = true;
     debug_print("{}", errmsg);
+
+
 
     out_queue->enqueue(SessionError{
         .sid = session_id,
@@ -51,6 +57,7 @@ void SessionHandle::resetRequestState(){
     tc_incomming.clear();
 
     saw_done = false;
+    request_failed = false;
     finish_reason.clear();
     native_finish_reason.clear();
 }
@@ -147,6 +154,8 @@ void SessionHandle::completeMessage(){
         handleEvent(chunks_buffer);
         chunks_buffer.clear();
     }
+
+    if (request_failed) return;
 
     bool clean_termination = saw_done || !finish_reason.empty() || !native_finish_reason.empty();
     if (!clean_termination) {
@@ -331,6 +340,7 @@ json SessionHandle::buildJSONSchema(const ToolSchema& schema){
 
 
 void SessionHandle::handleEvent(std::string_view event){
+    if (request_failed) return;
 
     if (event.starts_with(":")){
         // SSE comment to keep connection alive, just skip
@@ -350,6 +360,16 @@ void SessionHandle::handleEvent(std::string_view event){
 
         if (parsed.is_discarded()){
             sendError("Malformed response");
+            return;
+        }
+
+        // Check for a top level error field that indicates provider error
+        auto error_it = parsed.find("error");
+        if (error_it != parsed.end() && error_it->is_object()){
+            auto message_it = error_it->find("message");
+            sendError(message_it != error_it->end() && message_it->is_string()
+                ? message_it->get<std::string>()
+                : "Provider error");
             return;
         }
 

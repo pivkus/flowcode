@@ -2,7 +2,6 @@
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QStyledItemDelegate>
-#include <QPainter>
 #include <QListWidget>
 
 #include "../Bridge.hpp"

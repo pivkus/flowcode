@@ -1,12 +1,11 @@
 #pragma once
 #include <QWidget>
-#include <QPlainTextEdit>
-#include <QLineEdit>
-#include <QHBoxLayout>
+#include <optional>
 
 #include "../Bridge.hpp"
-#include "SessionWidget.hpp"
-#include "Sidebar.hpp"
+
+class SessionStack;
+class Sidebar;
 
 class MainWindow : public QWidget {
     Q_OBJECT
