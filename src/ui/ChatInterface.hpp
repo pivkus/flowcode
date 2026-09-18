@@ -8,9 +8,10 @@
 #include <QString>
 #include <QVBoxLayout>
 
-#include "../core/Messages.hpp"
+#include "../Bridge.hpp"
 
 class QLabel;
+class QSvgRenderer;
 
 class OutputTextBlock : public QWidget {
     Q_OBJECT
@@ -21,14 +22,28 @@ class OutputTextBlock : public QWidget {
         QLabel *label = nullptr;
 };
 
+
+
 class ReasoningBlock : public QWidget {
     Q_OBJECT
     public:
-        ReasoningBlock(QWidget *parent = nullptr);
+        explicit ReasoningBlock(QWidget *parent = nullptr);
         void append(const QString &text);
+        QSize sizeHint() const override;
+    protected:
+        void paintEvent(QPaintEvent *event) override;
     private:
-        QLabel *label = nullptr;
+        QString reasoning_text;
+        QColor bg_color;
+        QSvgRenderer *thinking_icon = nullptr;
+
+        static constexpr int horizontal_pad = 10;
+        static constexpr int vertical_pad = 8;
+        static constexpr int text_gap = 10;
+        static constexpr int corner_radius = 8;
 };
+
+
 
 class UserpromptBlock : public QWidget {
     Q_OBJECT

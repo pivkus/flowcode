@@ -14,7 +14,7 @@ set(CMAKE_AUTORCC ON)
 if(APPLE AND EXISTS /opt/homebrew/opt/qt)
     list(APPEND CMAKE_PREFIX_PATH /opt/homebrew/opt/qt)
 endif()
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Svg)
 
 set(BUILD_CURL_EXE OFF)
 set(CURL_USE_LIBPSL OFF)
@@ -29,6 +29,7 @@ add_library(nlohmann_json INTERFACE)
 target_include_directories(nlohmann_json INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/vendor/json)
 
 add_executable(flowcode
+    assets/assets.qrc
     src/main.cpp
     src/Bridge.cpp
     src/core/Backend.cpp
@@ -42,4 +43,4 @@ add_executable(flowcode
     src/ui/ChatInterface.cpp
     src/ui/Sidebar.cpp
 )
-target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets reproc++)
+target_link_libraries(flowcode PRIVATE CURL::libcurl nlohmann_json Qt6::Widgets Qt6::Svg reproc++)

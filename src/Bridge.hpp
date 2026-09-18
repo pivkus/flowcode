@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/Uuid.hpp"
+#include "core/Log.hpp"
 
 class Backend;
 
