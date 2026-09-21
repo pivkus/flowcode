@@ -57,8 +57,18 @@ class ErrorBlock : public QWidget {
     Q_OBJECT
     public:
         ErrorBlock(const QString &msg, QWidget *parent = nullptr);
+        QSize sizeHint() const override;
+        QSize minimumSizeHint() const override;
+        int heightForWidth(int width) const override;
+    protected:
+        void paintEvent(QPaintEvent *event) override;
     private:
-        QLabel *label = nullptr;
+        QString errmsg;
+        int layoutText(int width, QPainter *painter = nullptr) const;
+
+        static constexpr int horizontal_pad = 10;
+        static constexpr int vertical_pad = 8;
+        static constexpr int corner_radius = 8;
 };
 
 class ToolInfoBlock : public QWidget {

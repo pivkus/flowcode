@@ -5,6 +5,8 @@
 #include <QPainter>
 #include <QSizePolicy>
 #include <QSvgRenderer>
+#include <QTextLayout>
+#include <QtMath>
 
 ToolInfoBlock::ToolInfoBlock(QWidget *parent) : QWidget(parent) {
     auto *layout = new QVBoxLayout(this);
@@ -24,17 +26,66 @@ void ToolInfoBlock::finish(ToolCallId tcid, bool status){
     label->setText(label->text() + "\nFinished tool call");
 }
 
-ErrorBlock::ErrorBlock(const QString &msg, QWidget *parent) : QWidget(parent){
-    auto *layout = new QVBoxLayout(this);
+ErrorBlock::ErrorBlock(const QString &msg, QWidget *parent)
+: QWidget(parent), errmsg(msg)
+{
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
+}
+QSize ErrorBlock::sizeHint() const {
+    return {0, heightForWidth(width())};
+}
+QSize ErrorBlock::minimumSizeHint() const {
+    return {2 * horizontal_pad + fontMetrics().maxWidth(),
+            2 * vertical_pad + fontMetrics().height()};
+}
+int ErrorBlock::heightForWidth(int width) const {
+    return layoutText(qMax(1, width - 2 * horizontal_pad)) + 2 * vertical_pad;
+}
+int ErrorBlock::layoutText(int width, QPainter *painter) const {
+    QTextOption option;
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    qreal height = 0;
+    // Use the same layout for measurement and painting, preserving empty lines.
+    const QString normalized = QString(errmsg).replace("\r\n", "\n").replace('\r', '\n');
+    for (const auto &paragraph : normalized.split('\n')) {
+        if (paragraph.isEmpty()) {
+            height += fontMetrics().height();
+            continue;
+        }
+        QTextLayout layout(paragraph, font());
+        layout.setTextOption(option);
+        layout.beginLayout();
+        while (true) {
+            auto line = layout.createLine();
+            if (!line.isValid()) break;
+            line.setLineWidth(width);
+            line.setPosition(QPointF(0, height));
+            height += line.height();
+        }
+        layout.endLayout();
+        if (painter) layout.draw(painter, QPointF(horizontal_pad, vertical_pad));
+    }
+    return qCeil(height);
+}
+void ErrorBlock::paintEvent(QPaintEvent *event){
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    label = new QLabel(this);
-    label->setWordWrap(true);
-    label->setText(msg);
+    auto bg_rect = rect();
+    painter.setPen(QPen(QColor(255, 140, 0, 100), 1.0));
+    painter.setBrush(QColor(255, 140, 0, 64));
 
-    layout->addWidget(label);
+    // Inset by half the stroke width to keep the outline inside the widget.
+    painter.drawRoundedRect(QRectF(bg_rect).adjusted(0.5, 0.5, -0.5, -0.5),
+                            corner_radius, corner_radius);
 
-    setStyleSheet("border: 1px solid orange;"); // DEBUG
-    setLayout(layout);
+    const auto text_rect = bg_rect.adjusted(horizontal_pad, vertical_pad,
+                                           -horizontal_pad, -vertical_pad);
+    painter.setPen(Qt::white);
+    painter.setClipRect(text_rect);
+    layoutText(qMax(1, text_rect.width()), &painter);
 }
 
 UserpromptBlock::UserpromptBlock(const QString &prompt, QWidget *parent) : QWidget(parent){
@@ -47,7 +98,6 @@ UserpromptBlock::UserpromptBlock(const QString &prompt, QWidget *parent) : QWidg
 
     setStyleSheet("border: 1px solid green;"); // DEBUG
     setLayout(layout);
-
 }
 
 ReasoningBlock::ReasoningBlock(QWidget *parent)
