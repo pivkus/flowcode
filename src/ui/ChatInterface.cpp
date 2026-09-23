@@ -9,22 +9,78 @@
 #include <QtMath>
 
 ToolInfoBlock::ToolInfoBlock(QWidget *parent) : QWidget(parent) {
-    auto *layout = new QVBoxLayout(this);
-
-    label = new QLabel(this);
-    label->setWordWrap(true);
-    layout->addWidget(label);
-
-    setStyleSheet("border: 1px solid pink;"); // DEBUG
-    setLayout(layout);
+    tool_icon = new QSvgRenderer(QStringLiteral(":/assets/terminal.svg"), this);
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    setSizePolicy(policy);
 }
-
 void ToolInfoBlock::start(const QString &name, ToolCallId tcid){
-    label->setText(label->text() + "\nCalled: " + name);
+    if (state.contains(tcid)) return; // Should not happen
+
+    state[tcid] = Status::IN_PROGRESS;
+    named[tcid] = name;
+    updateGeometry();
+    update();
 }
 void ToolInfoBlock::finish(ToolCallId tcid, bool status){
-    label->setText(label->text() + "\nFinished tool call");
+    if (!state.contains(tcid)) return;
+    state[tcid] = status ? Status::SUCCEEDED : Status::FAILED;
+    update();
 }
+QSize ToolInfoBlock::sizeHint() const {
+    QFont prefix_font(font());
+    prefix_font.setWeight(QFont::DemiBold);
+    const int line_height = qMax(fontMetrics().height(), QFontMetrics(prefix_font).height());
+    return {0, 2*vertical_pad + static_cast<int>(state.size()) * line_height};
+}
+QSize ToolInfoBlock::minimumSizeHint() const {
+    return {2 * horizontal_pad + fontMetrics().maxWidth(),
+            2 * vertical_pad + fontMetrics().height()};
+}
+void ToolInfoBlock::paintEvent(QPaintEvent *event) {
+    QPainter painter(this);
+    const QRect text_rect = rect().adjusted(horizontal_pad, vertical_pad,
+                                            -horizontal_pad, -vertical_pad);
+    painter.setClipRect(text_rect);
+
+    QFont prefix_font(font());
+    prefix_font.setWeight(QFont::DemiBold);
+    const QFontMetrics prefix_metrics(prefix_font);
+
+    const int line_height = qMax(fontMetrics().height(), prefix_metrics.height());
+    const int icon_size = prefix_metrics.height();
+    int y = text_rect.top();
+    for (const auto &[tcid, status] : state) {
+        const auto name = named.find(tcid);
+        if (name == named.end()) continue;
+
+        QString prefix;
+        switch (status) {
+            case Status::IN_PROGRESS: prefix = QStringLiteral("Using "); break;
+            case Status::SUCCEEDED:   prefix = QStringLiteral("Used "); break;
+            case Status::FAILED:      prefix = QStringLiteral("Failed "); break;
+        }
+        const int prefix_width = prefix_metrics.horizontalAdvance(prefix);
+        tool_icon->render(&painter, QRectF(text_rect.left(),
+                                          y + (line_height - icon_size) / 2.0,
+                                          icon_size, icon_size));
+        const int prefix_x = text_rect.left() + icon_size + icon_gap;
+        painter.setFont(prefix_font);
+        painter.setPen(QColor("#ededed"));
+        painter.drawText(QRect(prefix_x, y, prefix_width, line_height),
+                         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, prefix);
+
+        painter.setFont(font());
+        painter.setPen(QColor("#b8b8b8"));
+        const int name_x = prefix_x + prefix_width;
+        painter.drawText(QRect(name_x, y,
+                               qMax(0, text_rect.right() - name_x + 1), line_height),
+                         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
+                         name->second);
+        y += line_height;
+    }
+}
+
+
 
 ErrorBlock::ErrorBlock(const QString &msg, QWidget *parent)
 : QWidget(parent), errmsg(msg)
@@ -41,33 +97,9 @@ QSize ErrorBlock::minimumSizeHint() const {
             2 * vertical_pad + fontMetrics().height()};
 }
 int ErrorBlock::heightForWidth(int width) const {
-    return layoutText(qMax(1, width - 2 * horizontal_pad)) + 2 * vertical_pad;
-}
-int ErrorBlock::layoutText(int width, QPainter *painter) const {
-    QTextOption option;
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    qreal height = 0;
-    // Use the same layout for measurement and painting, preserving empty lines.
-    const QString normalized = QString(errmsg).replace("\r\n", "\n").replace('\r', '\n');
-    for (const auto &paragraph : normalized.split('\n')) {
-        if (paragraph.isEmpty()) {
-            height += fontMetrics().height();
-            continue;
-        }
-        QTextLayout layout(paragraph, font());
-        layout.setTextOption(option);
-        layout.beginLayout();
-        while (true) {
-            auto line = layout.createLine();
-            if (!line.isValid()) break;
-            line.setLineWidth(width);
-            line.setPosition(QPointF(0, height));
-            height += line.height();
-        }
-        layout.endLayout();
-        if (painter) layout.draw(painter, QPointF(horizontal_pad, vertical_pad));
-    }
-    return qCeil(height);
+    const QRect text_rect(0, 0, qMax(1, width - 2*horizontal_pad), 0);
+    const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, errmsg);
+    return qMax(fontMetrics().height(), bounds.height()) + 2*vertical_pad;
 }
 void ErrorBlock::paintEvent(QPaintEvent *event){
     QPainter painter(this);
@@ -85,23 +117,51 @@ void ErrorBlock::paintEvent(QPaintEvent *event){
                                            -horizontal_pad, -vertical_pad);
     painter.setPen(Qt::white);
     painter.setClipRect(text_rect);
-    layoutText(qMax(1, text_rect.width()), &painter);
+    painter.drawText(text_rect, text_flags, errmsg);
 }
 
-UserpromptBlock::UserpromptBlock(const QString &prompt, QWidget *parent) : QWidget(parent){
-    auto *layout = new QVBoxLayout(this);
 
-    label = new QLabel(this);
-    label->setWordWrap(true);
-    label->setText(prompt);
-    layout->addWidget(label);
-
-    setStyleSheet("border: 1px solid green;"); // DEBUG
-    setLayout(layout);
+UserpromptBlock::UserpromptBlock(const QString &prompt, QWidget *parent)
+: QWidget(parent), prompt_text(prompt)
+{
+    QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    policy.setHeightForWidth(true);
+    setSizePolicy(policy);
 }
+QSize UserpromptBlock::sizeHint() const {
+    return {0, heightForWidth(width())};
+}
+QSize UserpromptBlock::minimumSizeHint() const {
+    return {2 * horizontal_pad + fontMetrics().maxWidth(),
+            2 * vertical_pad + fontMetrics().height()};
+}
+int UserpromptBlock::heightForWidth(int width) const {
+    const int bubble_width = qMax(1, width * bubble_width_percent / 100);
+    const QRect text_rect(0, 0, qMax(1, bubble_width - 2 * horizontal_pad), 0);
+    const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, prompt_text);
+    return qMax(fontMetrics().height(), bounds.height()) + 2 * vertical_pad;
+}
+void UserpromptBlock::paintEvent(QPaintEvent *event) {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    const int bubble_width = width() * bubble_width_percent / 100;
+    const QRect bubble_rect(width() - bubble_width, 0, bubble_width, height());
+    painter.setPen(QPen(QColor(70, 155, 255, 180), 1.0));
+    painter.setBrush(QColor(25, 110, 220, 210));
+    painter.drawRoundedRect(QRectF(bubble_rect).adjusted(0.5, 0.5, -0.5, -0.5),
+                            corner_radius, corner_radius);
+
+    const QRect text_rect = bubble_rect.adjusted(horizontal_pad, vertical_pad,
+                                                 -horizontal_pad, -vertical_pad);
+    painter.setPen(Qt::white);
+    painter.setClipRect(text_rect);
+    painter.drawText(text_rect, text_flags, prompt_text);
+}
+
 
 ReasoningBlock::ReasoningBlock(QWidget *parent)
-: QWidget(parent), bg_color("#343434")
+: QWidget(parent), bg_color(52, 52, 52, 64)
 {
     thinking_icon = new QSvgRenderer(QStringLiteral(":/assets/lightbulb.svg"), this);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -129,9 +189,12 @@ void ReasoningBlock::paintEvent(QPaintEvent *event) {
     const QFontMetrics content_metrics(content_font);
 
     auto bg_rect = rect();
-    painter.setPen(Qt::NoPen); // Draw no outline
+    painter.setPen(QPen(QColor(255, 255, 255, 40), 0));
     painter.setBrush(bg_color);
-    painter.drawRoundedRect(bg_rect, corner_radius, corner_radius);
+
+    // Inset by half the stroke width to keep the outline inside the widget.
+    painter.drawRoundedRect(QRectF(bg_rect).adjusted(0.5, 0.5, -0.5, -0.5),
+                            corner_radius, corner_radius);
 
     const QString prefix_text = "Thinking";
     const int prefix_width = prefix_metrics.horizontalAdvance(prefix_text);
@@ -185,8 +248,6 @@ OutputTextBlock::OutputTextBlock(QWidget *parent) : QWidget(parent){
     label->setWordWrap(true);
     layout->addWidget(label);
 
-    setStyleSheet("border: 1px solid red;"); // DEBUG
-
     setLayout(layout);
 }
 void OutputTextBlock::append(const QString &text){
@@ -194,6 +255,7 @@ void OutputTextBlock::append(const QString &text){
     // but that is a pain to make resize
     label->setText(label->text() + text);
 }
+
 
 ChatInterface::ChatInterface(QWidget *parent)
  : QWidget(parent)

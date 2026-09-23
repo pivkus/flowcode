@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QString>
 #include <QVBoxLayout>
+#include <QMap>
 
 #include "../Bridge.hpp"
 
@@ -21,7 +22,6 @@ class OutputTextBlock : public QWidget {
     private:
         QLabel *label = nullptr;
 };
-
 
 
 class ReasoningBlock : public QWidget {
@@ -44,13 +44,25 @@ class ReasoningBlock : public QWidget {
 };
 
 
-
 class UserpromptBlock : public QWidget {
     Q_OBJECT
     public:
         UserpromptBlock(const QString &prompt, QWidget *parent = nullptr);
+        QSize sizeHint() const override;
+        QSize minimumSizeHint() const override;
+        int heightForWidth(int width) const override;
+    protected:
+        void paintEvent(QPaintEvent *event) override;
     private:
-        QLabel *label = nullptr;
+        QString prompt_text;
+
+        static constexpr int horizontal_pad = 10;
+        static constexpr int vertical_pad = 8;
+        static constexpr int corner_radius = 8;
+        static constexpr int bubble_width_percent = 66;
+
+        static constexpr int text_flags =
+                Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap;
 };
 
 class ErrorBlock : public QWidget {
@@ -69,16 +81,39 @@ class ErrorBlock : public QWidget {
         static constexpr int horizontal_pad = 10;
         static constexpr int vertical_pad = 8;
         static constexpr int corner_radius = 8;
+
+        static constexpr int text_flags =
+                Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap;
 };
 
+// iterate all in block - name, store tcid (for start, finish), start/finish state, finish status
+// map tcid -> name, ordered map tcid -> opt<finish_state>
 class ToolInfoBlock : public QWidget {
     Q_OBJECT
     public:
         ToolInfoBlock(QWidget *parent = nullptr);
         void start(const QString &name, ToolCallId tcid);
         void finish(ToolCallId tcid, bool status);
+
+        QSize minimumSizeHint() const override;
+        QSize sizeHint() const override;
+    protected:
+        void paintEvent(QPaintEvent *event) override;
     private:
-        QLabel *label = nullptr;
+
+
+        enum class Status {
+            IN_PROGRESS,
+            SUCCEEDED,
+            FAILED
+        };
+        std::map<ToolCallId, Status> state;
+        std::map<ToolCallId, QString> named;
+        QSvgRenderer *tool_icon = nullptr;
+
+        static constexpr int horizontal_pad = 10;
+        static constexpr int vertical_pad = 8;
+        static constexpr int icon_gap = 5;
 
 };
 

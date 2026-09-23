@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/assets">
         <file>lightbulb.svg</file>
+        <file>terminal.svg</file>
     </qresource>
 </RCC>
