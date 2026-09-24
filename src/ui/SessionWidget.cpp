@@ -9,6 +9,8 @@
 #include <string>
 #include <variant>
 
+
+
 SessionWidget::SessionWidget(Uuid id, QWidget *parent)
  : QWidget(parent), id(id)
 {
@@ -51,29 +53,20 @@ void SessionWidget::submitPrompt(){
     input_field->clear();
 }
 
+
+
 void SessionWidget::renderSession(const TurnVec& history){
-    for (const auto& turn : history){
-        using enum Turn::Role;
-        switch (turn->role){
-            case USER: {
-                // TODO: this is ugly maybe switch turn to a variant instead of tagged struct
-                auto cnt = std::get<std::string>(turn->content);
-                chat->appendPrompt(QString::fromStdString(cnt));
-                break;
-            }
-            case ASSISTANT: {
-                auto cnt = std::get<AssistantContent>(turn->content);
-                // TODO: tool calls
-                chat->appendText(QString::fromStdString(cnt.text));
-                break;
-            }
-            case SYSTEM: { break; };
-            case TOOL: {
-                auto cnt = std::get<ToolResultContent>(turn->content);
-                // appendToolFinished(cnt.ok);
-                break;
-            };
-        }
+    for (const TurnPtr& turn : history){
+        std::visit(overloaded{
+            [&](const UserTurn& t){ chat->appendPrompt(QString::fromStdString(t.text)); },
+            [&](const AssistantTurn& t){
+                chat->appendReasoning(QString::fromStdString(t.reasoning));
+                chat->appendText(QString::fromStdString(t.text));
+                // TODO: this is not how the conversation played out (mixed output and reasoning)
+            }, 
+            [&](const ToolResultTurn& t){}, // TODO: tools
+            [&](const SystemTurn& t){} 
+        }, *turn);
     }
 }
 

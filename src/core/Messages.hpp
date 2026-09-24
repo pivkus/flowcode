@@ -18,18 +18,25 @@ struct ToolCallId {
     auto operator<=>(const ToolCallId&) const = default;
 };
 
-struct AssistantContent  { std::string text; ToolCallRequests tool_calls; };
-struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
+// struct AssistantContent  { std::string text; ToolCallRequests tool_calls; };
+// struct ToolResultContent { std::string tool_call_id; bool ok; std::string content; };
 
-using TurnContent = std::variant<std::string, AssistantContent, ToolResultContent>;
+// using TurnContent = std::variant<std::string, AssistantContent, ToolResultContent>;
 
-struct Turn {
-    enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
-    uint64_t turn_id;
-    Role role;
-    TurnContent content;
-};
+// struct Turn {
+//     enum class Role {USER, ASSISTANT, SYSTEM, TOOL};
+//     uint64_t turn_id;
+//     Role role;
+//     TurnContent content;
+// };
 
+struct UserTurn         { uint64_t tid; std::string text; };
+// TODO: this doesn't support the model switching between text and reasoning multiple times (unlike the ui with blocks)
+struct AssistantTurn    { uint64_t tid; std::string text; std::string reasoning; ToolCallRequests tool_calls; };
+struct ToolResultTurn   { uint64_t tid; std::string tool_call_id; bool ok; std::string content; };
+struct SystemTurn       { uint64_t tid; std::string text; };
+
+using Turn = std::variant<UserTurn, AssistantTurn, ToolResultTurn, SystemTurn>;
 using TurnPtr = std::shared_ptr<const Turn>;
 using TurnVec = std::vector<TurnPtr>;
 

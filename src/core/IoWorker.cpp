@@ -100,23 +100,18 @@ void IoWorker::persistTurns(Uuid sid, TurnVec turns){
 std::string IoWorker::getJSONLine(TurnPtr turn){
     json turn_obj;
 
-    turn_obj["turn_id"] = turn->turn_id;
-    
-    switch (turn->role) {
-            using enum Turn::Role;
-            case USER:      turn_obj["role"] = "user"; break;
-            case ASSISTANT: turn_obj["role"] = "assistant"; break;
-            case SYSTEM:    turn_obj["role"] = "system"; break;
-            case TOOL:      turn_obj["role"] = "tool"; break;
-    }
-
     std::visit(overloaded{
-        [&](const std::string& text){
-            turn_obj["content"] = text;
+        [&](const UserTurn& t){
+            turn_obj["turn_id"] = t.tid;
+            turn_obj["role"] = "user";
+            turn_obj["content"] = t.text;
         },
-        [&](const AssistantContent& acnt){
+        [&](const AssistantTurn& t){
+            turn_obj["turn_id"] = t.tid;
+            turn_obj["role"] = "assistant";
+
             json calls = json::array();
-            for (const auto& call : acnt.tool_calls){
+            for (const auto& call : t.tool_calls){
                 calls.push_back({
                     {"error", call.error},
                     {"id", call.id},
@@ -124,16 +119,23 @@ std::string IoWorker::getJSONLine(TurnPtr turn){
                     {"args", call.args}
                 });
             }
-            turn_obj["content"] = {{"text", acnt.text}, {"tool_calls", std::move(calls)}};
+            turn_obj["content"] = {{"text", t.text}, {"reasoning", t.reasoning }, {"tool_calls", std::move(calls)}};
         },
-        [&](const ToolResultContent& tcnt){
+        [&](const ToolResultTurn& t){
+            turn_obj["turn_id"] = t.tid;
+            turn_obj["role"] = "tool";
             turn_obj["content"] = {
-                {"tool_call_id", tcnt.tool_call_id},
-                {"ok", tcnt.ok},
-                {"output", tcnt.content}
+                {"tool_call_id", t.tool_call_id},
+                {"ok", t.ok},
+                {"output", t.content}
             };
+        },
+        [&](const SystemTurn& t){
+            turn_obj["turn_id"] = t.tid;
+            turn_obj["role"] = "system";
+            turn_obj["content"] = t.text;
         }
-    }, turn->content);
+    }, *turn);
 
     return turn_obj.dump();
 }
@@ -141,7 +143,6 @@ std::string IoWorker::getJSONLine(TurnPtr turn){
 TurnPtr IoWorker::tryParseLine(std::string& line){
 
     Turn turn;
-    using enum Turn::Role;
 
     json parsed = json::parse(line, nullptr, false);
     if (parsed.is_discarded()) return nullptr; // Parse error
@@ -154,23 +155,25 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
     if (r_it == parsed.end() || !r_it->is_string()) return nullptr;
     if (c_it == parsed.end()) return nullptr;
 
-    turn.turn_id = t_it->get<uint64_t>();
+    // turn.turn_id = t_it->get<uint64_t>();
     
     auto role_str = r_it->get<std::string>();
     if (role_str == "user") {
-        turn.role = USER;
-
         if (!c_it->is_string()) return nullptr;
-        turn.content = c_it->get<std::string>();
+        turn = UserTurn {
+            .tid = t_it->get<uint64_t>(),
+            .text = c_it->get<std::string>()
+        };
     }
     else if (role_str == "assistant") {
-        turn.role = ASSISTANT;
-
         if (!c_it->is_object()) return nullptr;
+
         auto tx_it = c_it->find("text");
         auto calls_it = c_it->find("tool_calls");
+        auto reason_it = c_it->find("reasoning");
         if (tx_it == c_it->end() || !tx_it->is_string()) return nullptr;
         if (calls_it == c_it->end() || !calls_it->is_array()) return nullptr;
+        if (reason_it == c_it->end() || !reason_it->is_string()) return nullptr;
 
         ToolCallRequests calls;
         calls.reserve(calls_it->size());
@@ -193,21 +196,23 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
             });
         }
 
-        turn.content = AssistantContent {
+        turn = AssistantTurn {
+            .tid = t_it->get<uint64_t>(),
             .text = tx_it->get<std::string>(),
+            .reasoning= reason_it->get<std::string>(),
             .tool_calls = std::move(calls)
         };
     }
     else if (role_str == "system") {
-        turn.role = SYSTEM;
-    
         if (!c_it->is_string()) return nullptr;
-        turn.content = c_it->get<std::string>();
+        turn = SystemTurn {
+            .tid = t_it->get<uint64_t>(),
+            .text = c_it->get<std::string>()
+        };
     }
     else if (role_str == "tool") {
-        turn.role = TOOL;
-
         if (!c_it->is_object()) return nullptr;
+
         auto tc_it = c_it->find("tool_call_id");
         auto ok_it = c_it->find("ok");
         auto ou_it = c_it->find("output");
@@ -215,10 +220,11 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
         if (ok_it == c_it->end() || !ok_it->is_boolean()) return nullptr;
         if (ou_it == c_it->end() || !ou_it->is_string()) return nullptr;
 
-        turn.content = ToolResultContent {
+        turn = ToolResultTurn {
+            .tid = t_it->get<uint64_t>(),
+            .content = ou_it->get<std::string>(),
             .tool_call_id = tc_it->get<std::string>(),
-            .ok = ok_it->get<bool>(),
-            .content = ou_it->get<std::string>()
+            .ok = ok_it->get<bool>()
         };
 
     }

@@ -5,12 +5,10 @@
 Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 : session_id(id), tool_schemas(std::move(allowed_tools))
 {
-    using enum Turn::Role;
 
-    TurnPtr sys = std::make_shared<Turn>(Turn{
-        .turn_id = 0,
-        .role = SYSTEM,
-        .content = "You are a helpful assistant the users answering questions"
+    TurnPtr sys = std::make_shared<Turn>(SystemTurn {
+        .tid = 0,
+        .text = "You are a helpful assistant the users answering questions"
     });
 
     history.push_back(std::move(sys));
@@ -44,17 +42,15 @@ Effects Session::submitUserTurn(std::string content) {
 
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
-    using enum Turn::Role;
-    TurnPtr turn = std::make_shared<Turn>(Turn{
-        .turn_id = turn_id,
-        .role = USER,
-        .content = std::move(content)
+    TurnPtr turn = std::make_shared<Turn>(UserTurn {
+        .tid = turn_id,
+        .text = std::move(content)
     });
     history.push_back(std::move(turn));
 
     state = State::AWAITING_MODEL;
     state_data = AwaitingModelData{
-        .incoming = ""
+        .output = ""
     };
 
     Effects effects = { SendRequest{
@@ -76,10 +72,10 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
     if (tokens.empty()) return {};
 
     if (type == TokensType::OUTPUT){
-        aw->incoming.append(tokens);
+        aw->output.append(tokens);
         return { OutputTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     } else {
-        // Reasoning tokens are not stored in session history
+        aw->reasoning.append(tokens);
         return { ReasoningTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     }
 
@@ -90,14 +86,11 @@ Effects Session::onTurnComplete(){
 
     auto aw = std::get<AwaitingModelData>(state_data);
 
-    using enum Turn::Role;
-    TurnPtr turn = std::make_shared<Turn>(Turn{
-        .turn_id = static_cast<uint64_t>(history.size()),
-        .role = ASSISTANT,
-        .content = AssistantContent{ 
-            .text = std::move(aw.incoming), 
-            .tool_calls = {}
-        }
+    TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
+        .tid = static_cast<uint64_t>(history.size()),
+        .text = std::move(aw.output),
+        .reasoning = std::move(aw.reasoning),
+        .tool_calls = {}
     });
 
     history.push_back(std::move(turn));
@@ -115,7 +108,7 @@ Effects Session::onRequestFailed(std::string errmsg){
     if (state != State::AWAITING_MODEL) return {};
 
     auto aw = std::get<AwaitingModelData>(state_data);
-    aw.incoming.clear();
+    aw.output.clear();
 
     state = State::IDLE;
     state_data = std::monostate{};
@@ -129,14 +122,11 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     auto aw = std::get<AwaitingModelData>(state_data);
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
-    using enum Turn::Role;
-    TurnPtr turn = std::make_shared<Turn>(Turn{
-        .turn_id = turn_id,
-        .role = ASSISTANT,
-        .content = AssistantContent {
-            .text = std::move(aw.incoming),
-            .tool_calls = tool_reqs // Does a copy right now
-        }
+    TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
+        .tid = turn_id,
+        .text = std::move(aw.output),
+        .reasoning = std::move(aw.reasoning),
+        .tool_calls = tool_reqs // Does a copy right now
     });
     history.push_back(std::move(turn));
 
@@ -204,16 +194,12 @@ void Session::finishToolCalls(Effects& effects){
     auto& ts = std::get<ToolCallExecData>(state_data);
     if (ts.remaining > 0) return;
 
-    using enum Turn::Role;
     for (auto& slot : ts.slots_){
-        TurnPtr turn = std::make_shared<Turn> (Turn {
-            .turn_id = static_cast<uint64_t>(history.size()),
-            .role = TOOL,
-            .content = ToolResultContent {
-                .tool_call_id = std::move(slot.id),
-                .ok = slot.result.ok,
-                .content = std::move(slot.result.content)
-            }
+        TurnPtr turn = std::make_shared<Turn> (ToolResultTurn {
+            .tid = static_cast<uint64_t>(history.size()),
+            .tool_call_id = std::move(slot.id),
+            .ok = slot.result.ok,
+            .content = std::move(slot.result.content)
         });
         history.push_back(std::move(turn));
     }
@@ -226,7 +212,7 @@ void Session::finishToolCalls(Effects& effects){
 
     state = State::AWAITING_MODEL;
     state_data = AwaitingModelData {
-        .incoming = ""
+        .output = ""
     };
 
     persistPending(effects);

@@ -12,6 +12,8 @@ class ChatInterface;
 class QLineEdit;
 class QScrollArea;
 
+template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
+
 class SessionWidget : public QWidget {
     Q_OBJECT
     public:

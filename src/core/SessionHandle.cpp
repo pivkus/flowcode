@@ -245,28 +245,21 @@ size_t SessionHandle::writeback(const char* data, size_t len){
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
 void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
-    static constexpr auto roleStr = [](Turn::Role role) -> std::string_view {
-        switch (role) {
-            case Turn::Role::USER:      return "user";
-            case Turn::Role::ASSISTANT: return "assistant";
-            case Turn::Role::SYSTEM:    return "system";
-            case Turn::Role::TOOL:      return "tool";
-        }
-        return "user";
-    };
 
     for (const auto& turn : turns) {
-        json msg = {{"role", roleStr(turn->role)}};
+        json msg = json::object();
 
         std::visit(overloaded{
-            [&](const std::string& text) {
-                msg["content"] = text;
+            [&](const UserTurn& t) {
+                msg["role"] = "user";
+                msg["content"] = t.text;
             },
-            [&](const AssistantContent& a) {
-                msg["content"] = a.text;
-                if (!a.tool_calls.empty()) {
+            [&](const AssistantTurn t) {
+                msg["role"] = "assistant";
+                msg["content"] = t.text;
+                if (!t.tool_calls.empty()) {
                     json calls = json::array();
-                    for (const auto& call : a.tool_calls) {
+                    for (const auto& call : t.tool_calls) {
                         calls.push_back({
                             {"id",   call.id},
                             {"type", "function"},
@@ -279,11 +272,16 @@ void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
                     msg["tool_calls"] = std::move(calls);
                 }
             },
-            [&](const ToolResultContent& t) {
+            [&](const ToolResultTurn& t) {
+                msg["role"] = "tool";
                 msg["tool_call_id"] = t.tool_call_id;
                 msg["content"]      = t.content;
+            },
+            [&](const SystemTurn& t){
+                msg["role"] = "system";
+                msg["content"] = t.text;
             }
-        }, turn->content);
+        }, *turn);
 
         json_payload["messages"].push_back(std::move(msg));
     }
