@@ -36,8 +36,7 @@ class Session {
     private:
 
         struct AwaitingModelData {
-            std::string output;
-            std::string reasoning;
+            std::vector<AssistantBlock> blocks;
         };
         struct ToolCallExecData {
 

@@ -254,9 +254,13 @@ void SessionHandle::serializeTurnsToJSON(const TurnVec& turns) {
                 msg["role"] = "user";
                 msg["content"] = t.text;
             },
-            [&](const AssistantTurn t) {
+            [&](const AssistantTurn& t) {
                 msg["role"] = "assistant";
-                msg["content"] = t.text;
+                std::string output;
+                for (const auto& block : t.blocks){
+                    if (block.kind == AssistantBlock::Kind::OUTPUT) output += block.text;
+                }
+                msg["content"] = std::move(output);
                 if (!t.tool_calls.empty()) {
                     json calls = json::array();
                     for (const auto& call : t.tool_calls) {

@@ -49,9 +49,7 @@ Effects Session::submitUserTurn(std::string content) {
     history.push_back(std::move(turn));
 
     state = State::AWAITING_MODEL;
-    state_data = AwaitingModelData{
-        .output = ""
-    };
+    state_data = AwaitingModelData{};
 
     Effects effects = { SendRequest{
         .sid = session_id,
@@ -71,11 +69,16 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
 
     if (tokens.empty()) return {};
 
+    const auto kind = type == TokensType::OUTPUT ? AssistantBlock::Kind::OUTPUT : AssistantBlock::Kind::REASONING;
+    if (aw->blocks.empty() || aw->blocks.back().kind != kind){
+        aw->blocks.push_back(AssistantBlock{ .kind = kind, .text = tokens });
+    } else {
+        aw->blocks.back().text.append(tokens);
+    }
+
     if (type == TokensType::OUTPUT){
-        aw->output.append(tokens);
         return { OutputTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     } else {
-        aw->reasoning.append(tokens);
         return { ReasoningTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     }
 
@@ -88,8 +91,7 @@ Effects Session::onTurnComplete(){
 
     TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
         .tid = static_cast<uint64_t>(history.size()),
-        .text = std::move(aw.output),
-        .reasoning = std::move(aw.reasoning),
+        .blocks = std::move(aw.blocks),
         .tool_calls = {}
     });
 
@@ -107,9 +109,6 @@ Effects Session::onTurnComplete(){
 Effects Session::onRequestFailed(std::string errmsg){
     if (state != State::AWAITING_MODEL) return {};
 
-    auto aw = std::get<AwaitingModelData>(state_data);
-    aw.output.clear();
-
     state = State::IDLE;
     state_data = std::monostate{};
 
@@ -124,8 +123,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
 
     TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
         .tid = turn_id,
-        .text = std::move(aw.output),
-        .reasoning = std::move(aw.reasoning),
+        .blocks = std::move(aw.blocks),
         .tool_calls = tool_reqs // Does a copy right now
     });
     history.push_back(std::move(turn));
@@ -211,9 +209,7 @@ void Session::finishToolCalls(Effects& effects){
     });
 
     state = State::AWAITING_MODEL;
-    state_data = AwaitingModelData {
-        .output = ""
-    };
+    state_data = AwaitingModelData{};
 
     persistPending(effects);
 }

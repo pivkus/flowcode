@@ -60,9 +60,12 @@ void SessionWidget::renderSession(const TurnVec& history){
         std::visit(overloaded{
             [&](const UserTurn& t){ chat->appendPrompt(QString::fromStdString(t.text)); },
             [&](const AssistantTurn& t){
-                chat->appendReasoning(QString::fromStdString(t.reasoning));
-                chat->appendText(QString::fromStdString(t.text));
-                // TODO: this is not how the conversation played out (mixed output and reasoning)
+                for (const auto& block : t.blocks){
+                    const auto text = QString::fromStdString(block.text);
+                    if (block.kind == AssistantBlock::Kind::OUTPUT) chat->appendText(text);
+                    else chat->appendReasoning(text);
+                }
+                chat->finishTurn();
             }, 
             [&](const ToolResultTurn& t){}, // TODO: tools
             [&](const SystemTurn& t){} 

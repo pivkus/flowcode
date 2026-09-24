@@ -110,6 +110,13 @@ std::string IoWorker::getJSONLine(TurnPtr turn){
             turn_obj["turn_id"] = t.tid;
             turn_obj["role"] = "assistant";
 
+            json blocks = json::array();
+            for (const auto& block : t.blocks){
+                blocks.push_back({
+                    {"kind", block.kind == AssistantBlock::Kind::OUTPUT ? "output" : "reasoning"},
+                    {"text", block.text}
+                });
+            }
             json calls = json::array();
             for (const auto& call : t.tool_calls){
                 calls.push_back({
@@ -119,7 +126,7 @@ std::string IoWorker::getJSONLine(TurnPtr turn){
                     {"args", call.args}
                 });
             }
-            turn_obj["content"] = {{"text", t.text}, {"reasoning", t.reasoning }, {"tool_calls", std::move(calls)}};
+            turn_obj["content"] = {{"blocks", std::move(blocks)}, {"tool_calls", std::move(calls)}};
         },
         [&](const ToolResultTurn& t){
             turn_obj["turn_id"] = t.tid;
@@ -168,12 +175,26 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
     else if (role_str == "assistant") {
         if (!c_it->is_object()) return nullptr;
 
-        auto tx_it = c_it->find("text");
+        auto blocks_it = c_it->find("blocks");
         auto calls_it = c_it->find("tool_calls");
-        auto reason_it = c_it->find("reasoning");
-        if (tx_it == c_it->end() || !tx_it->is_string()) return nullptr;
+        if (blocks_it == c_it->end() || !blocks_it->is_array()) return nullptr;
         if (calls_it == c_it->end() || !calls_it->is_array()) return nullptr;
-        if (reason_it == c_it->end() || !reason_it->is_string()) return nullptr;
+
+        std::vector<AssistantBlock> blocks;
+        for (const auto& jblock : *blocks_it){
+            if (!jblock.is_object()) return nullptr;
+            auto kind_it = jblock.find("kind");
+            auto text_it = jblock.find("text");
+            if (kind_it == jblock.end() || !kind_it->is_string()) return nullptr;
+            if (text_it == jblock.end() || !text_it->is_string()) return nullptr;
+
+            const auto kind = kind_it->get<std::string>();
+            if (kind != "output" && kind != "reasoning") return nullptr;
+            blocks.push_back(AssistantBlock {
+                .kind = kind == "output" ? AssistantBlock::Kind::OUTPUT : AssistantBlock::Kind::REASONING,
+                .text = text_it->get<std::string>()
+            });
+        }
 
         ToolCallRequests calls;
         calls.reserve(calls_it->size());
@@ -198,8 +219,7 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
 
         turn = AssistantTurn {
             .tid = t_it->get<uint64_t>(),
-            .text = tx_it->get<std::string>(),
-            .reasoning= reason_it->get<std::string>(),
+            .blocks = std::move(blocks),
             .tool_calls = std::move(calls)
         };
     }
