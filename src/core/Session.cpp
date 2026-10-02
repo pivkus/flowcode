@@ -1,6 +1,7 @@
 #include "Session.hpp"
 
 #include <utility>
+#include <algorithm>
 
 Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 : session_id(id), tool_schemas(std::move(allowed_tools))
@@ -66,7 +67,6 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
 
     auto* aw = std::get_if<AwaitingModelData>(&state_data);
     if (!aw) return {};
-
     if (tokens.empty()) return {};
 
     const auto kind = type == TokensType::OUTPUT ? AssistantBlock::Kind::OUTPUT : AssistantBlock::Kind::REASONING;
@@ -81,7 +81,6 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
     } else {
         return { ReasoningTokensDelta{ .sid = session_id, .delta = std::move(tokens) } };
     }
-
 }
 
 Effects Session::onTurnComplete(){
@@ -96,8 +95,10 @@ Effects Session::onTurnComplete(){
     });
 
     history.push_back(std::move(turn));
+
     state = State::IDLE;
     state_data = std::monostate{};
+    retries_used = 0;
 
     Effects effects = { TurnFinished{ .sid = session_id } };
     persistPending(effects);
@@ -105,14 +106,50 @@ Effects Session::onTurnComplete(){
     return effects;
 }
 
-// TODO: distinquish different errors and support re-trying
-Effects Session::onRequestFailed(std::string errmsg){
+Effects Session::onRequestFailed(RequestFailed failure){
+    // Failure is only valid in AWAITING_MODEL, RETRY_WAIT means waiting on a retry
     if (state != State::AWAITING_MODEL) return {};
+    auto aw = std::get<AwaitingModelData>(state_data);
 
-    state = State::IDLE;
-    state_data = std::monostate{};
+    // Retry only retryable failures with no output ommited in the turn
+    // and with available retry budget
+    if (failure.retry && aw.blocks.empty() && retries_used < max_retries){
+        state = State::RETRY_WAIT;
+        state_data = {};
+        
+        size_t delay = init_retry_delay_ms;
+        for (size_t r = 0; r < retries_used; r++){
+            delay *= 2;
+            if (delay > max_retry_delay_ms) { delay = max_retry_delay_ms; break; }
+        }
+        retries_used += 1;
 
-    return { SessionError{ .sid = session_id, .msg = std::move(errmsg) } };
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(delay);
+        return { 
+            SessionError{ .sid = session_id, .msg = "Error Retrying..." },
+            ScheduleRetry{ 
+                .sid = session_id,
+                .deadline = deadline
+            }
+        };
+    } else {
+        state = State::IDLE;
+        state_data = std::monostate{};
+        retries_used = 0;
+
+        return { SessionError{ .sid = session_id, .msg = std::move(failure.msg) } };
+    }
+
+}
+
+Effects Session::onRetryDue(){
+    if (state != State::RETRY_WAIT) return {};
+    
+    state = State::AWAITING_MODEL;
+    state_data = AwaitingModelData{};
+    // Does not reset retries_used
+
+    return { SendRequest{ .sid = session_id, .snapshot = snapshotHistory(), .tools = tool_schemas } };
 }
 
 Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
@@ -127,6 +164,8 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
         .tool_calls = tool_reqs // Does a copy right now
     });
     history.push_back(std::move(turn));
+    // The model finished generating the assistant turn successfully, reset retry counter
+    retries_used = 0;
 
     std::vector<ToolCallExecData::Slot> slots_;
     Effects effects;

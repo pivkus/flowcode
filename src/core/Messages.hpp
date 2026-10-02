@@ -34,6 +34,7 @@ using TurnPtr = std::shared_ptr<const Turn>;
 using TurnVec = std::vector<TurnPtr>;
 
 struct PersistTurns         { Uuid sid; TurnVec turns; };
+struct ScheduleRetry        { Uuid sid; std::chrono::steady_clock::time_point deadline; };
 
 struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
@@ -58,6 +59,7 @@ struct EmitToolResult       { Uuid sid; ToolCallId tcid; bool ok; std::string co
 // Errors
 struct GlobalError          { std::string msg; };
 struct SessionError         { Uuid sid; std::string msg; };
+struct RequestFailed        { Uuid sid; std::string msg; bool retry; };
 
 struct EffectNone { };
 
@@ -71,7 +73,8 @@ using Effect = std::variant<
     EmitToolStarted, 
     EmitToolResult, 
     SessionError, 
-    PersistTurns
+    PersistTurns,
+    ScheduleRetry
 >;
 using Effects = std::vector<Effect>;
 
@@ -99,7 +102,7 @@ using fromNetworkMessage = std::variant<
     ReasoningTokensDelta, 
     TurnFinished, 
     ToolCallsMade, 
-    SessionError
+    RequestFailed
 >;
 
 using toIoMessage = std::variant<

@@ -39,17 +39,16 @@ SessionHandle::~SessionHandle(){
     curl_easy_cleanup(handle);
 }
 
-void SessionHandle::sendError(std::string errmsg){
-    if (request_failed) return;
-    request_failed = true;
+void SessionHandle::sendError(std::string errmsg, bool retry){
+    // Does not actually send the error right away, it will be sent only after the request terminates
+    if (pending_failure) return;
     debug_print("{}", errmsg);
 
-
-
-    out_queue->enqueue(SessionError{
+    pending_failure = RequestFailed {
         .sid = session_id,
-        .msg = std::move(errmsg)
-    });
+        .msg = std::move(errmsg),
+        .retry = retry
+    };
 }
 
 void SessionHandle::resetRequestState(){
@@ -57,9 +56,10 @@ void SessionHandle::resetRequestState(){
     tc_incomming.clear();
 
     saw_done = false;
-    request_failed = false;
+    pending_failure = std::nullopt;
     finish_reason.clear();
     native_finish_reason.clear();
+    chunks_buffer.clear();
 }
 
 
@@ -154,25 +154,24 @@ void SessionHandle::completeMessage(){
         handleEvent(chunks_buffer);
         chunks_buffer.clear();
     }
-
-    if (request_failed) return;
+    if (pending_failure) return;
 
     bool clean_termination = saw_done || !finish_reason.empty() || !native_finish_reason.empty();
     if (!clean_termination) {
-        sendError("Model didnt terminate correctly");
+        sendError("Model didnt terminate correctly", false);
         return;
     }
     
     if (finish_reason == "length"){
-        sendError("Context limit reached (finish_reason length)");
+        sendError("Context limit reached (finish_reason length)", false);
         return;
     }
     if (finish_reason == "content_filter"){
-        sendError("Response blocked (finish_reason content_filter)");
+        sendError("Response blocked (finish_reason content_filter)", false);
         return;
     }
     if (finish_reason == "error" || native_finish_reason == "error"){
-        sendError("Provider reported an error (finish_reason error)");
+        sendError("Provider reported an error (finish_reason error)", false);
         return;
     }
 
@@ -229,6 +228,11 @@ size_t SessionHandle::writeTrampoline(char* p, size_t sz, size_t n, void* userda
 }
 
 size_t SessionHandle::writeback(const char* data, size_t len){
+    // stop sending more chunks after request failed
+    if (pending_failure){
+        return CURL_WRITEFUNC_ERROR; // This will kill the request
+    }
+
     chunks_buffer.append(data, len);
 
     size_t start_idx = 0;
@@ -236,6 +240,9 @@ size_t SessionHandle::writeback(const char* data, size_t len){
     while ( (sep_idx = chunks_buffer.find("\n\n", start_idx)) != std::string::npos ){
         std::string_view event(chunks_buffer.begin() + start_idx, chunks_buffer.begin() + sep_idx);
         handleEvent(event);
+        if (pending_failure){
+            return CURL_WRITEFUNC_ERROR;
+        }
         start_idx = sep_idx + 2;
     }
     chunks_buffer.erase(0, start_idx);
@@ -342,14 +349,13 @@ json SessionHandle::buildJSONSchema(const ToolSchema& schema){
 
 
 void SessionHandle::handleEvent(std::string_view event){
-    if (request_failed) return;
 
     if (event.starts_with(":")){
         // SSE comment to keep connection alive, just skip
         return;
     } else if (!event.starts_with("data: ")){
         // Not a well formed SSE, for example a plain HTTP error body
-        sendError("HTTP error"); // TODO: better error reporting (code, reason)
+        sendError("HTTP error", true); // TODO: better error reporting (code, reason)
         return;
     } else {
         if (event.compare("data: [DONE]") == 0){
@@ -361,7 +367,7 @@ void SessionHandle::handleEvent(std::string_view event){
         json parsed = json::parse(event, nullptr, false);
 
         if (parsed.is_discarded()){
-            sendError("Malformed response");
+            sendError("Malformed response", true);
             return;
         }
 
@@ -371,7 +377,8 @@ void SessionHandle::handleEvent(std::string_view event){
             auto message_it = error_it->find("message");
             sendError(message_it != error_it->end() && message_it->is_string()
                 ? message_it->get<std::string>()
-                : "Provider error");
+                : "Provider error",
+                true );
             return;
         }
 

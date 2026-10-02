@@ -56,6 +56,8 @@ class Backend {
         // Global tool registry
         ToolRegistry tool_registry;
 
+        std::map<Uuid, ScheduleRetry> network_retries;
+
         CURLM *multi;
 
 };

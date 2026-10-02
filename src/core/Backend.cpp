@@ -1,6 +1,7 @@
 #include "Backend.hpp"
 #include "SessionHandle.hpp"
 #include "Uuid.hpp"
+#include "Log.hpp"
 
 // TODO: is there an easier way to include all of them?
 #include "tools/BashTool.hpp"
@@ -22,6 +23,7 @@ Backend::Backend(){
     fromUIQueue.setCallback(wakeCoordinator);
     fromToolQueue.setCallback(wakeCoordinator);
     fromIoQueue.setCallback(wakeCoordinator);
+    fromNetworkQueue.setCallback(wakeCoordinator);
 
     // TODO: Backend and Bridge have a circular reference with these callbacks, make sure they get deleted in a way
     // so this will no be called on a destroyed object
@@ -78,9 +80,10 @@ void Backend::networkWorker(std::stop_token stop){
                 } catch (const std::exception &e){
                     // e.g. missing API key; report to the UI instead of crashing the worker
 
-                    fromNetworkQueue.enqueue(SessionError {
+                    fromNetworkQueue.enqueue(RequestFailed {
                         .sid = req->sid,
-                        .msg = e.what()
+                        .msg = e.what(),
+                        .retry = false
                     });
                     se_cache.erase(req->sid);
                     continue;
@@ -103,12 +106,28 @@ void Backend::networkWorker(std::stop_token stop){
 
             // data.result is only valid when msg == CURLMSG_DONE
             if (m->msg == CURLMSG_DONE){
-                if (m->data.result != CURLE_OK){
-                    session.sendError(curl_easy_strerror(m->data.result));
-                } else {
-                    session.completeMessage();
-                }
+                const CURLcode result = m->data.result;
                 curl_multi_remove_handle(multi, session.raw());
+
+                if (!session.pending_failure){
+                    if (result != CURLE_OK){
+                        // Curl errors not triggered by us
+                        fromNetworkQueue.enqueue(RequestFailed {
+                            .sid = session.id(),
+                            .msg = curl_easy_strerror(result),
+                            .retry = true
+                        });
+                    } else {
+                        session.completeMessage();
+                    }
+                }
+
+                // completeMessage can set pending_failure
+                if (session.pending_failure){
+                    // Termination caused by sendError, send the pending error
+                    fromNetworkQueue.enqueue(std::move(*session.pending_failure));
+                }
+                session.resetRequestState();
             }
         }
 
@@ -156,8 +175,8 @@ void Backend::executeEffects(Effects&& effects){
             [&](TurnFinished& t){ toUIQueue.enqueue(std::move(t)); },
             [&](ToolExecute& t){ toToolQueue.enqueue(std::move(t)); },
             [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); },
-
             [&](PersistTurns& t){ toIoQueue.enqueue(std::move(t)); },
+            [&](ScheduleRetry& r){ network_retries.insert_or_assign(r.sid, std::move(r)); },
             [&](EffectNone& e){},
         }, e);
     }
@@ -209,9 +228,9 @@ void Backend::coordinatorWorker(std::stop_token stop){
                     Session& s = sessions.at(tf.sid);
                     effects = s.onTurnComplete();
                 },
-                [&](SessionError& e){
+                [&](RequestFailed& e){
                     Session& s = sessions.at(e.sid);
-                    effects = s.onRequestFailed(std::move(e.msg));
+                    effects = s.onRequestFailed(std::move(e));
                 },
                 [&](ToolCallsMade& tcs){
                     Session& s = sessions.at(tcs.sid);
@@ -241,6 +260,16 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); }
             }, *msg);
         }
+
+        std::erase_if(network_retries, [&](const auto& retry){
+            if (std::chrono::steady_clock::now() >= retry.second.deadline){
+                Session& s = sessions.at(retry.first);
+                Effects effects = s.onRetryDue();
+                executeEffects(std::move(effects));
+                return true;
+            }
+            return false;
+        });
 
         // periodically sleep, if there is work or stop wakeup
         std::unique_lock<std::mutex> lock(coord_mutex);

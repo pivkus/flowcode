@@ -27,11 +27,14 @@ class SessionHandle {
 
         void prepareMessage(toNetworkMessage& request);
         void completeMessage();
-        void sendError(std::string errmsg);
+        void sendError(std::string errmsg, bool retry);
 
         CURL *raw();
         Uuid id();
 
+        // clears buffers/state in prepareMessage and on error paths
+        void resetRequestState();
+        std::optional<RequestFailed> pending_failure;
     private:
 
         static size_t writeTrampoline(char* p, size_t sz, size_t n, void* userdata);
@@ -44,9 +47,6 @@ class SessionHandle {
 
         // Returns an empty string if valid, otherwise a human-readable reason
         std::string validateToolCall(std::string& name, json& args);
-
-        // clears buffers/state in prepareMessage and on error paths
-        void resetRequestState();
 
         CURL *handle;
         struct curl_slist *headers;
@@ -72,7 +72,6 @@ class SessionHandle {
         std::string finish_reason;
         std::string native_finish_reason;
         bool saw_done = false; // "data: [DONE]"" was emitted
-        bool request_failed = false;
 
         
 };
