@@ -5,8 +5,7 @@
 #include <QPainter>
 #include <QSizePolicy>
 #include <QSvgRenderer>
-#include <QTextLayout>
-#include <QtMath>
+#include <QTimer>
 
 ToolInfoBlock::ToolInfoBlock(QWidget *parent) : QWidget(parent) {
     tool_icon = new QSvgRenderer(QStringLiteral(":/assets/terminal.svg"), this);
@@ -89,6 +88,27 @@ ErrorBlock::ErrorBlock(const QString &msg, QWidget *parent)
     policy.setHeightForWidth(true);
     setSizePolicy(policy);
 }
+ErrorBlock::ErrorBlock(const QString &msg, std::chrono::steady_clock::time_point deadline, QWidget *parent)
+: ErrorBlock(msg, parent)
+{
+    retry_timer = new QTimer(this);
+    const auto update_countdown = [this, deadline]{
+        const auto remaining = deadline - std::chrono::steady_clock::now();
+        const auto seconds = std::chrono::ceil<std::chrono::seconds>(remaining).count();
+        const QString status = seconds > 0
+            ? QStringLiteral("Retrying in %1 s").arg(seconds)
+            : QStringLiteral("Retrying…");
+        if (status != retry_status){
+            retry_status = status;
+            updateGeometry();
+            update();
+        }
+        if (seconds <= 0) retry_timer->stop();
+    };
+    connect(retry_timer, &QTimer::timeout, this, update_countdown);
+    retry_timer->start(100);
+    update_countdown();
+}
 QSize ErrorBlock::sizeHint() const {
     return {0, heightForWidth(width())};
 }
@@ -98,8 +118,11 @@ QSize ErrorBlock::minimumSizeHint() const {
 }
 int ErrorBlock::heightForWidth(int width) const {
     const QRect text_rect(0, 0, qMax(1, width - 2*horizontal_pad), 0);
-    const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, errmsg);
+    const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, displayText());
     return qMax(fontMetrics().height(), bounds.height()) + 2*vertical_pad;
+}
+QString ErrorBlock::displayText() const {
+    return retry_status.isEmpty() ? errmsg : errmsg + '\n' + retry_status;
 }
 void ErrorBlock::paintEvent(QPaintEvent *event){
     QPainter painter(this);
@@ -117,7 +140,7 @@ void ErrorBlock::paintEvent(QPaintEvent *event){
                                            -horizontal_pad, -vertical_pad);
     painter.setPen(Qt::white);
     painter.setClipRect(text_rect);
-    painter.drawText(text_rect, text_flags, errmsg);
+    painter.drawText(text_rect, text_flags, displayText());
 }
 
 
@@ -297,10 +320,6 @@ void ChatInterface::appendToolFinished(ToolCallId tcid, bool status){
     }
 
     active_tools.erase(it);
-}
-
-void ChatInterface::appendError(const QString &error){
-    addBlock<ErrorBlock>(error);
 }
 
 void ChatInterface::finishTurn(){

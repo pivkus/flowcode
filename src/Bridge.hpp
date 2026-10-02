@@ -26,6 +26,7 @@ class Bridge : public QObject {
         void toolCallFinished(Uuid id, ToolCallId tcid, bool status);
         void responseFinished(Uuid id);
         void responseError(Uuid id, const QString &content);
+        void responseRetry(Uuid id, const QString &content, std::chrono::steady_clock::time_point deadline);
 
         void sessionListReceived(std::vector<Uuid> list);
         void sessionLoadReceived(Uuid id, TurnVec history);

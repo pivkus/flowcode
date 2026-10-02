@@ -2,6 +2,7 @@
 #include <compare>
 #include <cstddef>
 #include <cstdint>
+#include <chrono>
 #include <vector>
 #include <memory>
 #include <variant>
@@ -59,6 +60,7 @@ struct EmitToolResult       { Uuid sid; ToolCallId tcid; bool ok; std::string co
 // Errors
 struct GlobalError          { std::string msg; };
 struct SessionError         { Uuid sid; std::string msg; };
+struct SessionRetry         { Uuid sid; std::string msg; std::chrono::steady_clock::time_point deadline; };
 struct RequestFailed        { Uuid sid; std::string msg; bool retry; };
 
 struct EffectNone { };
@@ -73,6 +75,7 @@ using Effect = std::variant<
     EmitToolStarted, 
     EmitToolResult, 
     SessionError, 
+    SessionRetry,
     PersistTurns,
     ScheduleRetry
 >;
@@ -86,6 +89,7 @@ using toUIMessage = std::variant<
     EmitToolResult, 
     TurnFinished, 
     SessionError, 
+    SessionRetry,
     ListSessionsRes,
     LoadSessionRes
 >;

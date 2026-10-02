@@ -31,6 +31,7 @@ void Bridge::drainMessages(){
             [&](EmitToolStarted& ts){ emit toolCallStarted(ts.sid, ts.tcid ,QString::fromStdString(ts.name)); },
             [&](EmitToolResult& tr){ emit toolCallFinished(tr.sid, tr.tcid, tr.ok); },
             [&](SessionError& e){ emit responseError(e.sid, QString::fromStdString(e.msg)); },
+            [&](SessionRetry& r){ emit responseRetry(r.sid, QString::fromStdString(r.msg), r.deadline); },
             [&](TurnFinished& tf){ emit responseFinished(tf.sid); },
             [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids)); },
             [&](LoadSessionRes& ls){ emit sessionLoadReceived(ls.sid, std::move(ls.history)); },

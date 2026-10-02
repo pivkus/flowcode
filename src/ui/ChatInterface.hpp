@@ -13,6 +13,7 @@
 
 class QLabel;
 class QSvgRenderer;
+class QTimer;
 
 class OutputTextBlock : public QWidget {
     Q_OBJECT
@@ -69,6 +70,8 @@ class ErrorBlock : public QWidget {
     Q_OBJECT
     public:
         ErrorBlock(const QString &msg, QWidget *parent = nullptr);
+        ErrorBlock(const QString &msg, std::chrono::steady_clock::time_point deadline, QWidget *parent = nullptr);
+        bool isRetry() const { return retry_timer != nullptr; }
         QSize sizeHint() const override;
         QSize minimumSizeHint() const override;
         int heightForWidth(int width) const override;
@@ -76,7 +79,9 @@ class ErrorBlock : public QWidget {
         void paintEvent(QPaintEvent *event) override;
     private:
         QString errmsg;
-        int layoutText(int width, QPainter *painter = nullptr) const;
+        QString retry_status;
+        QTimer *retry_timer = nullptr;
+        QString displayText() const;
 
         static constexpr int horizontal_pad = 10;
         static constexpr int vertical_pad = 8;
@@ -127,7 +132,6 @@ class ChatInterface : public QWidget {
         void appendToolStarted(const QString &name, ToolCallId tcid);
         void appendToolFinished(ToolCallId tcid, bool status);
 
-        void appendError(const QString &error);
         void appendPrompt(const QString &prompt);
 
         void finishTurn();

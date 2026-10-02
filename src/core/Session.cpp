@@ -126,7 +126,7 @@ Effects Session::onRequestFailed(RequestFailed failure){
 
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(delay);
         return { 
-            SessionError{ .sid = session_id, .msg = "Error Retrying..." },
+            SessionRetry{ .sid = session_id, .msg = std::move(failure.msg), .deadline = deadline },
             ScheduleRetry{ 
                 .sid = session_id,
                 .deadline = deadline

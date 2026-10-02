@@ -11,6 +11,8 @@ class Bridge;
 class ChatInterface;
 class QLineEdit;
 class QScrollArea;
+class QVBoxLayout;
+class ErrorBlock;
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
@@ -23,6 +25,8 @@ class SessionWidget : public QWidget {
 
         void finishResponse();
         void reportError(const QString &content);
+        void reportRetry(const QString &content, std::chrono::steady_clock::time_point deadline);
+        void clearRetryError();
 
         ChatInterface *chat = nullptr;
     signals:
@@ -33,6 +37,11 @@ class SessionWidget : public QWidget {
     private:
         Uuid id;
         bool active_response = false;
+
+        void setErrorBlock(ErrorBlock *block);
+        void clearError();
+        QVBoxLayout *main_layout = nullptr;
+        ErrorBlock *error_block = nullptr;
 
         QLineEdit *input_field = nullptr;
         QScrollArea *chat_area = nullptr;
@@ -54,6 +63,7 @@ class SessionStack : public QStackedWidget {
         void routeToolStarted(Uuid id, ToolCallId tcid, const QString &name);
         void routeToolFinished(Uuid id, ToolCallId tcid, bool status);
         void routeError(Uuid id, const QString &content);
+        void routeRetry(Uuid id, const QString &content, std::chrono::steady_clock::time_point deadline);
         void routeFinish(Uuid id);
     private:
         // Adds the Uuid to SessionWidget mapping to QStackedWidget

@@ -175,6 +175,7 @@ void Backend::executeEffects(Effects&& effects){
             [&](TurnFinished& t){ toUIQueue.enqueue(std::move(t)); },
             [&](ToolExecute& t){ toToolQueue.enqueue(std::move(t)); },
             [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); },
+            [&](SessionRetry& r){ toUIQueue.enqueue(std::move(r)); },
             [&](PersistTurns& t){ toIoQueue.enqueue(std::move(t)); },
             [&](ScheduleRetry& r){ network_retries.insert_or_assign(r.sid, std::move(r)); },
             [&](EffectNone& e){},
