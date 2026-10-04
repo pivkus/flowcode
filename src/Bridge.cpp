@@ -39,10 +39,11 @@ void Bridge::drainMessages(){
     }
 }
 
-void Bridge::userPromptSent(Uuid id, const QString &content){
+void Bridge::userPromptSent(Uuid id, const QString &content, const QString &model){
     backend.fromUIQueue.enqueue(PromptSubmission {
         .sid = id,
-        .prompt = content.toStdString()
+        .prompt = content.toStdString(),
+        .model = model.toStdString()
     });
 }
 

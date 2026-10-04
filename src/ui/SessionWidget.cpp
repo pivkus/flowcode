@@ -72,7 +72,7 @@ void SessionWidget::submitPrompt(){
     const QString prompt = input_field->text();
     chat->appendPrompt(prompt);
 
-    emit userPromptSent(id, prompt);
+    emit userPromptSent(id, prompt, selected_model);
     input_field->clear();
 }
 

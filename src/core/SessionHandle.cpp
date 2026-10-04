@@ -69,7 +69,7 @@ void SessionHandle::prepareMessage(toNetworkMessage& request){
     resetRequestState();
 
     // TODO: these thing should be passed in the request
-    json_payload["model"] = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+    json_payload["model"] = request.model;
     json_payload["stream"] = true;
     json_payload["messages"] = json::array();
     json_payload["reasoning"] = { {"enabled", true} };

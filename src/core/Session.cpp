@@ -1,4 +1,5 @@
 #include "Session.hpp"
+#include "Log.hpp"
 
 #include <utility>
 #include <algorithm>
@@ -24,6 +25,14 @@ Session::Session(Uuid id, SchemaMapPtr allowed_tools, TurnVec history)
     persisted_upto = this->history.size();
 }
 
+void Session::setIdleState(){
+    // Also resets the per-request state
+    state = State::IDLE;
+    state_data = std::monostate{};
+    retries_used = 0;
+    current_model = "";
+}
+
 std::shared_ptr<TurnVec> Session::snapshotHistory() const {
     return std::make_shared<TurnVec>(history);
 }
@@ -38,24 +47,27 @@ void Session::persistPending(Effects& effects){
     persisted_upto = history.size();
 }
 
-Effects Session::submitUserTurn(std::string content) {
+Effects Session::submitUserTurn(PromptSubmission ps) {
     if (state != State::IDLE) return {};
 
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
     TurnPtr turn = std::make_shared<Turn>(UserTurn {
         .tid = turn_id,
-        .text = std::move(content)
+        .text = std::move(ps.prompt)
     });
     history.push_back(std::move(turn));
 
     state = State::AWAITING_MODEL;
     state_data = AwaitingModelData{};
+    current_model = std::move(ps.model);
+
 
     Effects effects = { SendRequest{
         .sid = session_id,
         .snapshot = snapshotHistory(),
-        .tools = tool_schemas
+        .tools = tool_schemas,
+        .model = current_model
     } };
 
     persistPending(effects);
@@ -96,9 +108,7 @@ Effects Session::onTurnComplete(){
 
     history.push_back(std::move(turn));
 
-    state = State::IDLE;
-    state_data = std::monostate{};
-    retries_used = 0;
+    setIdleState();
 
     Effects effects = { TurnFinished{ .sid = session_id } };
     persistPending(effects);
@@ -133,10 +143,8 @@ Effects Session::onRequestFailed(RequestFailed failure){
             }
         };
     } else {
-        state = State::IDLE;
-        state_data = std::monostate{};
-        retries_used = 0;
-
+        // Terminal failure
+        setIdleState();
         return { SessionError{ .sid = session_id, .msg = std::move(failure.msg) } };
     }
 
@@ -149,13 +157,18 @@ Effects Session::onRetryDue(){
     state_data = AwaitingModelData{};
     // Does not reset retries_used
 
-    return { SendRequest{ .sid = session_id, .snapshot = snapshotHistory(), .tools = tool_schemas } };
+    return { SendRequest{ 
+        .sid = session_id, 
+        .snapshot = snapshotHistory(), 
+        .tools = tool_schemas,
+        .model = current_model
+    } };
 }
 
 Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
     if (state != State::AWAITING_MODEL) return {};
 
-    auto aw = std::get<AwaitingModelData>(state_data);
+    auto& aw = std::get<AwaitingModelData>(state_data);
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
     TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
@@ -244,7 +257,8 @@ void Session::finishToolCalls(Effects& effects){
     effects.push_back(SendRequest{
         .sid = session_id,
         .snapshot = snapshotHistory(),
-        .tools = tool_schemas
+        .tools = tool_schemas,
+        .model = current_model
     });
 
     state = State::AWAITING_MODEL;

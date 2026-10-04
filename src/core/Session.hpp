@@ -18,7 +18,7 @@ class Session {
         Uuid session_id;
 
         // Commands from the UI
-        Effects submitUserTurn(std::string content);
+        Effects submitUserTurn(PromptSubmission ps);
 
         // Events from the network
         Effects onTextDelta(std::string tokens, TokensType type);
@@ -50,8 +50,11 @@ class Session {
             size_t remaining;
         };
 
+
         // Appends the tool turns and goes back to AWAITING_MODEL
         void finishToolCalls(Effects& effects);
+
+        void setIdleState();
 
         // Tracks how many turns have been persisted (saved) to disc
         size_t persisted_upto = 0;
@@ -67,4 +70,6 @@ class Session {
         std::variant<std::monostate, AwaitingModelData, ToolCallExecData> state_data;
         TurnVec history;
         SchemaMapPtr tool_schemas;
+
+        std::string current_model;
 };

@@ -32,7 +32,7 @@ class Bridge : public QObject {
         void sessionLoadReceived(Uuid id, TurnVec history);
 
     public slots:
-        void userPromptSent(Uuid id, const QString &content);
+        void userPromptSent(Uuid id, const QString &content, const QString &model);
         void sessionCreated(Uuid id);
 
         void sessionsListRequested();

@@ -37,12 +37,13 @@ using TurnVec = std::vector<TurnPtr>;
 struct PersistTurns         { Uuid sid; TurnVec turns; };
 struct ScheduleRetry        { Uuid sid; std::chrono::steady_clock::time_point deadline; };
 
-struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;  SchemaMapPtr tools; };
+struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;
+                              SchemaMapPtr tools; std::string model; };
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
 struct ReasoningTokensDelta { Uuid sid; std::string delta; };
 struct TurnFinished         { Uuid sid; };
 
-struct PromptSubmission     { Uuid sid; std::string prompt; };
+struct PromptSubmission     { Uuid sid; std::string prompt; std::string model; };
 struct SessionCreation      { Uuid sid; };
 
 struct ListSessionsRes      { std::vector<Uuid> uuids; };

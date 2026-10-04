@@ -201,7 +201,7 @@ void Backend::coordinatorWorker(std::stop_token stop){
                 },
                 [&](PromptSubmission& ps){
                     Session& s = sessions.at(ps.sid);
-                    Effects effects = s.submitUserTurn(std::move(ps.prompt));
+                    Effects effects = s.submitUserTurn(std::move(ps));
                     executeEffects(std::move(effects));
                 },
                 [&](ListSessionsReq& ls){

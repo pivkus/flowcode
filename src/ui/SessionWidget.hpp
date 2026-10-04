@@ -30,13 +30,16 @@ class SessionWidget : public QWidget {
 
         ChatInterface *chat = nullptr;
     signals:
-        void userPromptSent(Uuid id, const QString &content);
+        void userPromptSent(Uuid id, const QString &content, const QString &model);
     private slots:
         void submitPrompt();
 
     private:
         Uuid id;
         bool active_response = false;
+
+        // QString selected_model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
+        QString selected_model = "qwen/qwen3.8-27b:free";
 
         void setErrorBlock(ErrorBlock *block);
         void clearError();
