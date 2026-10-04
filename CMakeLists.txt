@@ -40,6 +40,7 @@ add_executable(flowcode
     src/core/tools/BashTool.cpp
     src/ui/MainWindow.cpp
     src/ui/SessionWidget.cpp
+    src/ui/ModelPickerOverlay.cpp
     src/ui/ChatInterface.cpp
     src/ui/Sidebar.cpp
 )

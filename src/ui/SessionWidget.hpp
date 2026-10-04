@@ -13,6 +13,7 @@ class QLineEdit;
 class QScrollArea;
 class QVBoxLayout;
 class ErrorBlock;
+class ModelPickerOverlay;
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
@@ -38,8 +39,7 @@ class SessionWidget : public QWidget {
         Uuid id;
         bool active_response = false;
 
-        // QString selected_model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
-        QString selected_model = "qwen/qwen3.8-27b:free";
+        ModelPickerOverlay *model_picker = nullptr;
 
         void setErrorBlock(ErrorBlock *block);
         void clearError();

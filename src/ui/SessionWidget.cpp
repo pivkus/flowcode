@@ -1,9 +1,12 @@
 #include "SessionWidget.hpp"
 #include "ChatInterface.hpp"
+#include "ModelPickerOverlay.hpp"
 #include "../Bridge.hpp"
 
 #include <QLineEdit>
 #include <QScrollArea>
+#include <QStackedLayout>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <QString>
 #include <string>
@@ -23,8 +26,34 @@ SessionWidget::SessionWidget(Uuid id, QWidget *parent)
     chat_area->setWidgetResizable(true);
     chat_area->setWidget(chat);
 
-    main_layout->addWidget(chat_area, 8);
-    main_layout->addWidget(input_field, 2);
+    auto *chat_container = new QWidget(this);
+    auto *chat_layout = new QStackedLayout(chat_container);
+    chat_layout->setContentsMargins(0, 0, 0, 0);
+    chat_layout->setStackingMode(QStackedLayout::StackAll);
+
+    chat_layout->addWidget(chat_area);
+
+    model_picker = new ModelPickerOverlay(chat_container);
+    model_picker->setFont(chat->font());
+    chat_layout->addWidget(model_picker);
+    model_picker->hide();
+
+    auto *input_group = new QWidget(this);
+    auto *input_layout = new QVBoxLayout(input_group);
+
+    input_layout->setContentsMargins(0, 0, 0, 0);
+    auto *model_button = new ModelPickerButton(input_group);
+    model_button->setFont(chat->font());
+    model_button->setText(model_picker->selectedModel());
+    input_layout->addWidget(model_button, 0, Qt::AlignLeft);
+    input_layout->addWidget(input_field);
+
+    main_layout->addWidget(chat_container, 1);
+    main_layout->addWidget(input_group);
+
+    connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::openPicker);
+    connect(model_picker, &ModelPickerOverlay::modelSelected, model_button, &QToolButton::setText);
+    connect(model_picker, &ModelPickerOverlay::dismissed, this, [this]{ input_field->setFocus(); });
 
     setLayout(main_layout);
 
@@ -72,7 +101,7 @@ void SessionWidget::submitPrompt(){
     const QString prompt = input_field->text();
     chat->appendPrompt(prompt);
 
-    emit userPromptSent(id, prompt, selected_model);
+    emit userPromptSent(id, prompt, model_picker->selectedModel());
     input_field->clear();
 }
 
