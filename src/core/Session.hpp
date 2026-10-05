@@ -34,22 +34,18 @@ class Session {
         std::shared_ptr<TurnVec> snapshotHistory() const;
     private:
 
-        struct AwaitingModelData {
-            std::vector<AssistantBlock> blocks;
-        };
-        struct ToolCallExecData {
+        struct Idle {};
+        struct RetryWait {};
+        struct AwaitingModel { std::vector<AssistantBlock> blocks; };
+        struct ToolCallExec {
+                struct Slot { std::string id; std::string name; ToolResult result; };
 
-            struct Slot {
-                std::string id; 
-                std::string name;
-                ToolResult result;
-            };
-
-            uint64_t turn_id;
-            std::vector<Slot> slots_;
-            size_t remaining;
+                uint64_t turn_id;
+                std::vector<Slot> slots_;
+                size_t remaining;
         };
 
+        std::variant<Idle, RetryWait, AwaitingModel, ToolCallExec> state = Idle{};
 
         // Appends the tool turns and goes back to AWAITING_MODEL
         void finishToolCalls(Effects& effects);
@@ -65,9 +61,6 @@ class Session {
         static constexpr size_t max_retry_delay_ms  = 30000;
         static constexpr size_t max_retries = 8;
 
-        enum class State {IDLE, AWAITING_MODEL, TOOL_CALL_EXEC, RETRY_WAIT};
-        State state = State::IDLE;
-        std::variant<std::monostate, AwaitingModelData, ToolCallExecData> state_data;
         TurnVec history;
         SchemaMapPtr tool_schemas;
 

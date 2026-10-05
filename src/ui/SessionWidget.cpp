@@ -27,24 +27,22 @@ SessionWidget::SessionWidget(Uuid id, QWidget *parent)
     chat_area->setWidget(chat);
 
     auto *chat_container = new QWidget(this);
+
     auto *chat_layout = new QStackedLayout(chat_container);
     chat_layout->setContentsMargins(0, 0, 0, 0);
     chat_layout->setStackingMode(QStackedLayout::StackAll);
-
     chat_layout->addWidget(chat_area);
 
     model_picker = new ModelPickerOverlay(chat_container);
-    model_picker->setFont(chat->font());
     chat_layout->addWidget(model_picker);
     model_picker->hide();
 
     auto *input_group = new QWidget(this);
     auto *input_layout = new QVBoxLayout(input_group);
-
     input_layout->setContentsMargins(0, 0, 0, 0);
+
     auto *model_button = new ModelPickerButton(input_group);
-    model_button->setFont(chat->font());
-    model_button->setText(model_picker->selectedModel());
+    model_button->setText(model_picker->selected_model);
     input_layout->addWidget(model_button, 0, Qt::AlignLeft);
     input_layout->addWidget(input_field);
 
@@ -101,7 +99,7 @@ void SessionWidget::submitPrompt(){
     const QString prompt = input_field->text();
     chat->appendPrompt(prompt);
 
-    emit userPromptSent(id, prompt, model_picker->selectedModel());
+    emit userPromptSent(id, prompt, model_picker->selected_model);
     input_field->clear();
 }
 

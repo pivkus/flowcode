@@ -22,20 +22,16 @@ class ModelPickerOverlay : public QWidget {
     Q_OBJECT
     public:
         explicit ModelPickerOverlay(QWidget *parent = nullptr);
-        const QString& selectedModel() const { return selected_model; }
         void openPicker();
-
+        QString selected_model = "qwen/qwen3.8-27b:free";
     signals:
         void modelSelected(const QString &model);
         void dismissed();
-
     protected:
         void mousePressEvent(QMouseEvent *event) override;
-
     private:
         void dismiss();
 
-        QString selected_model = "qwen/qwen3.8-27b:free";
         QFrame *panel = nullptr;
         QLineEdit *model_field = nullptr;
 };

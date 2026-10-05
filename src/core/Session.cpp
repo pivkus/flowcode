@@ -20,15 +20,12 @@ Session::Session(Uuid id, SchemaMapPtr allowed_tools)
 Session::Session(Uuid id, SchemaMapPtr allowed_tools, TurnVec history)
 : session_id(id), tool_schemas(std::move(allowed_tools)), history(std::move(history))
 {
-    state = State::IDLE;
-    state_data = std::monostate{};
     persisted_upto = this->history.size();
 }
 
 void Session::setIdleState(){
     // Also resets the per-request state
-    state = State::IDLE;
-    state_data = std::monostate{};
+    state = Idle{};
     retries_used = 0;
     current_model = "";
 }
@@ -48,7 +45,7 @@ void Session::persistPending(Effects& effects){
 }
 
 Effects Session::submitUserTurn(PromptSubmission ps) {
-    if (state != State::IDLE) return {};
+    if (!std::get_if<Idle>(&state)) return {};
 
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
@@ -58,10 +55,8 @@ Effects Session::submitUserTurn(PromptSubmission ps) {
     });
     history.push_back(std::move(turn));
 
-    state = State::AWAITING_MODEL;
-    state_data = AwaitingModelData{};
+    state = AwaitingModel{};
     current_model = std::move(ps.model);
-
 
     Effects effects = { SendRequest{
         .sid = session_id,
@@ -75,9 +70,7 @@ Effects Session::submitUserTurn(PromptSubmission ps) {
 }
 
 Effects Session::onTextDelta(std::string tokens, TokensType type){
-    if (state != State::AWAITING_MODEL) return {};
-
-    auto* aw = std::get_if<AwaitingModelData>(&state_data);
+    auto *aw = std::get_if<AwaitingModel>(&state);
     if (!aw) return {};
     if (tokens.empty()) return {};
 
@@ -96,13 +89,12 @@ Effects Session::onTextDelta(std::string tokens, TokensType type){
 }
 
 Effects Session::onTurnComplete(){
-    if (state != State::AWAITING_MODEL) return {};
-
-    auto aw = std::get<AwaitingModelData>(state_data);
+    auto *aw = std::get_if<AwaitingModel>(&state);
+    if (!aw) return {};
 
     TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
         .tid = static_cast<uint64_t>(history.size()),
-        .blocks = std::move(aw.blocks),
+        .blocks = std::move(aw->blocks),
         .tool_calls = {}
     });
 
@@ -118,14 +110,13 @@ Effects Session::onTurnComplete(){
 
 Effects Session::onRequestFailed(RequestFailed failure){
     // Failure is only valid in AWAITING_MODEL, RETRY_WAIT means waiting on a retry
-    if (state != State::AWAITING_MODEL) return {};
-    auto aw = std::get<AwaitingModelData>(state_data);
+    auto *aw = std::get_if<AwaitingModel>(&state);
+    if (!aw) return {};
 
     // Retry only retryable failures with no output ommited in the turn
     // and with available retry budget
-    if (failure.retry && aw.blocks.empty() && retries_used < max_retries){
-        state = State::RETRY_WAIT;
-        state_data = {};
+    if (failure.retry && aw->blocks.empty() && retries_used < max_retries){
+        state = RetryWait{};
         
         size_t delay = init_retry_delay_ms;
         for (size_t r = 0; r < retries_used; r++){
@@ -151,10 +142,9 @@ Effects Session::onRequestFailed(RequestFailed failure){
 }
 
 Effects Session::onRetryDue(){
-    if (state != State::RETRY_WAIT) return {};
+    if (!std::get_if<RetryWait>(&state)) return {};
     
-    state = State::AWAITING_MODEL;
-    state_data = AwaitingModelData{};
+    state = AwaitingModel{};
     // Does not reset retries_used
 
     return { SendRequest{ 
@@ -166,21 +156,21 @@ Effects Session::onRetryDue(){
 }
 
 Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
-    if (state != State::AWAITING_MODEL) return {};
+    auto *aw = std::get_if<AwaitingModel>(&state);
+    if (!aw) return {};
 
-    auto& aw = std::get<AwaitingModelData>(state_data);
     uint64_t turn_id = static_cast<uint64_t>(history.size());
 
     TurnPtr turn = std::make_shared<Turn>(AssistantTurn {
         .tid = turn_id,
-        .blocks = std::move(aw.blocks),
+        .blocks = std::move(aw->blocks),
         .tool_calls = tool_reqs // Does a copy right now
     });
     history.push_back(std::move(turn));
     // The model finished generating the assistant turn successfully, reset retry counter
     retries_used = 0;
 
-    std::vector<ToolCallExecData::Slot> slots_;
+    std::vector<ToolCallExec::Slot> slots_;
     Effects effects;
 
     // call_id can be used as a unique id of a tool call in one batch - the model can't make another request
@@ -220,8 +210,7 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
         call_id++;
     }
 
-    state = State::TOOL_CALL_EXEC;
-    state_data = ToolCallExecData {
+    state = ToolCallExec {
         .turn_id = turn_id,
         .slots_ = std::move(slots_),
         .remaining = dispatched
@@ -239,12 +228,11 @@ Effects Session::onToolCallsRequest(ToolCallRequests tool_reqs){
 }
 
 void Session::finishToolCalls(Effects& effects){
-    if (state != State::TOOL_CALL_EXEC) return;
+    auto *ts = std::get_if<ToolCallExec>(&state);
+    if (!ts) return;
+    if (ts->remaining > 0) return;
 
-    auto& ts = std::get<ToolCallExecData>(state_data);
-    if (ts.remaining > 0) return;
-
-    for (auto& slot : ts.slots_){
+    for (auto& slot : ts->slots_){
         TurnPtr turn = std::make_shared<Turn> (ToolResultTurn {
             .tid = static_cast<uint64_t>(history.size()),
             .tool_call_id = std::move(slot.id),
@@ -261,19 +249,15 @@ void Session::finishToolCalls(Effects& effects){
         .model = current_model
     });
 
-    state = State::AWAITING_MODEL;
-    state_data = AwaitingModelData{};
-
+    state = AwaitingModel{};
     persistPending(effects);
 }
 
 Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult result){
-    if (state != State::TOOL_CALL_EXEC) return {};
-
-    auto& ts = std::get<ToolCallExecData>(state_data);
-    if (ts.turn_id != turn_id) return {}; // stale turn_id
-
-    if (ts.slots_.size() <= call_id) return {}; // invalid call_id
+    auto *ts = std::get_if<ToolCallExec>(&state);
+    if (!ts) return {};
+    if (ts->turn_id != turn_id) return {}; // stale turn_id
+    if (ts->slots_.size() <= call_id) return {}; // invalid call_id
 
     Effects effects = {};
     effects.push_back(EmitToolResult {
@@ -284,10 +268,10 @@ Effects Session::onToolCallResult(uint64_t turn_id, size_t call_id, ToolResult r
         .content = result.content
     });
 
-    ts.slots_[call_id].result = std::move(result);
-    ts.remaining--;
+    ts->slots_[call_id].result = std::move(result);
+    ts->remaining--;
 
-    if (ts.remaining == 0){
+    if (ts->remaining == 0){
         finishToolCalls(effects);
     }
 
