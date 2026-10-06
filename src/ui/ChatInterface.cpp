@@ -7,8 +7,10 @@
 #include <QSvgRenderer>
 #include <QTimer>
 
+#include "Theme.hpp"
+
 ToolInfoBlock::ToolInfoBlock(QWidget *parent) : QWidget(parent) {
-    tool_icon = new QSvgRenderer(QStringLiteral(":/assets/terminal.svg"), this);
+    tool_icon = new QSvgRenderer(themedSvg(QStringLiteral(":/assets/terminal.svg"), theme.text), this);
     QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setSizePolicy(policy);
 }
@@ -28,17 +30,19 @@ void ToolInfoBlock::finish(ToolCallId tcid, bool status){
 QSize ToolInfoBlock::sizeHint() const {
     QFont prefix_font(font());
     prefix_font.setWeight(QFont::DemiBold);
+
     const int line_height = qMax(fontMetrics().height(), QFontMetrics(prefix_font).height());
-    return {0, 2*vertical_pad + static_cast<int>(state.size()) * line_height};
+    int lines = line_height * static_cast<int>(state.size());
+    return {0, 2 * Sizing::vertical_pad + lines};
 }
 QSize ToolInfoBlock::minimumSizeHint() const {
-    return {2 * horizontal_pad + fontMetrics().maxWidth(),
-            2 * vertical_pad + fontMetrics().height()};
+    return {2 * Sizing::horizontal_pad + fontMetrics().maxWidth(),
+            2 * Sizing::vertical_pad   + fontMetrics().height()};
 }
 void ToolInfoBlock::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
-    const QRect text_rect = rect().adjusted(horizontal_pad, vertical_pad,
-                                            -horizontal_pad, -vertical_pad);
+
+    const QRect text_rect = padded_rect(rect());
     painter.setClipRect(text_rect);
 
     QFont prefix_font(font());
@@ -63,13 +67,14 @@ void ToolInfoBlock::paintEvent(QPaintEvent *event) {
                                           y + (line_height - icon_size) / 2.0,
                                           icon_size, icon_size));
         const int prefix_x = text_rect.left() + icon_size + icon_gap;
+
         painter.setFont(prefix_font);
-        painter.setPen(QColor("#ededed"));
+        painter.setPen(theme.text);
         painter.drawText(QRect(prefix_x, y, prefix_width, line_height),
                          Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, prefix);
 
         painter.setFont(font());
-        painter.setPen(QColor("#b8b8b8"));
+        painter.setPen(theme.text_secondary);
         const int name_x = prefix_x + prefix_width;
         painter.drawText(QRect(name_x, y,
                                qMax(0, text_rect.right() - name_x + 1), line_height),
@@ -113,13 +118,13 @@ QSize ErrorBlock::sizeHint() const {
     return {0, heightForWidth(width())};
 }
 QSize ErrorBlock::minimumSizeHint() const {
-    return {2 * horizontal_pad + fontMetrics().maxWidth(),
-            2 * vertical_pad + fontMetrics().height()};
+    return {2 * Sizing::horizontal_pad + fontMetrics().maxWidth(),
+            2 * Sizing::vertical_pad + fontMetrics().height()};
 }
 int ErrorBlock::heightForWidth(int width) const {
-    const QRect text_rect(0, 0, qMax(1, width - 2*horizontal_pad), 0);
+    const QRect text_rect(0, 0, qMax(1, width - 2*Sizing::horizontal_pad), 0);
     const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, displayText());
-    return qMax(fontMetrics().height(), bounds.height()) + 2*vertical_pad;
+    return qMax(fontMetrics().height(), bounds.height()) + 2*Sizing::vertical_pad;
 }
 QString ErrorBlock::displayText() const {
     return retry_status.isEmpty() ? errmsg : errmsg + '\n' + retry_status;
@@ -128,17 +133,10 @@ void ErrorBlock::paintEvent(QPaintEvent *event){
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    auto bg_rect = rect();
-    painter.setPen(QPen(QColor(255, 140, 0, 100), 1.0));
-    painter.setBrush(QColor(255, 140, 0, 64));
+    paintBackground(painter, rect(), theme.orange, theme.orange_border);
+    const auto text_rect = padded_rect(rect());
 
-    // Inset by half the stroke width to keep the outline inside the widget.
-    painter.drawRoundedRect(QRectF(bg_rect).adjusted(0.5, 0.5, -0.5, -0.5),
-                            corner_radius, corner_radius);
-
-    const auto text_rect = bg_rect.adjusted(horizontal_pad, vertical_pad,
-                                           -horizontal_pad, -vertical_pad);
-    painter.setPen(Qt::white);
+    painter.setPen(theme.text_bright);
     painter.setClipRect(text_rect);
     painter.drawText(text_rect, text_flags, displayText());
 }
@@ -155,45 +153,43 @@ QSize UserpromptBlock::sizeHint() const {
     return {0, heightForWidth(width())};
 }
 QSize UserpromptBlock::minimumSizeHint() const {
-    return {2 * horizontal_pad + fontMetrics().maxWidth(),
-            2 * vertical_pad + fontMetrics().height()};
+    return {2 * Sizing::horizontal_pad + fontMetrics().maxWidth(),
+            2 * Sizing::vertical_pad   + fontMetrics().height()};
 }
 int UserpromptBlock::heightForWidth(int width) const {
     const int bubble_width = qMax(1, width * bubble_width_percent / 100);
-    const QRect text_rect(0, 0, qMax(1, bubble_width - 2 * horizontal_pad), 0);
+    const QRect text_rect(0, 0, qMax(1, bubble_width - 2*Sizing::horizontal_pad), 0);
+
     const QRect bounds = fontMetrics().boundingRect(text_rect, text_flags, prompt_text);
-    return qMax(fontMetrics().height(), bounds.height()) + 2 * vertical_pad;
+    return qMax(fontMetrics().height(), bounds.height()) + 2 * Sizing::vertical_pad;
 }
 void UserpromptBlock::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
     const int bubble_width = width() * bubble_width_percent / 100;
-    const QRect bubble_rect(width() - bubble_width, 0, bubble_width, height());
-    painter.setPen(QPen(QColor(70, 155, 255, 180), 1.0));
-    painter.setBrush(QColor(25, 110, 220, 210));
-    painter.drawRoundedRect(QRectF(bubble_rect).adjusted(0.5, 0.5, -0.5, -0.5),
-                            corner_radius, corner_radius);
 
-    const QRect text_rect = bubble_rect.adjusted(horizontal_pad, vertical_pad,
-                                                 -horizontal_pad, -vertical_pad);
-    painter.setPen(Qt::white);
+    const QRect bubble_rect(width() - bubble_width, 0, bubble_width, height());
+    paintBackground(painter, bubble_rect, theme.blue, theme.blue_border);
+
+    const QRect text_rect = padded_rect(bubble_rect);
+    painter.setPen(theme.text_bright);
     painter.setClipRect(text_rect);
     painter.drawText(text_rect, text_flags, prompt_text);
 }
 
 
 ReasoningBlock::ReasoningBlock(QWidget *parent)
-: QWidget(parent), bg_color(52, 52, 52, 64)
+: QWidget(parent)
 {
-    thinking_icon = new QSvgRenderer(QStringLiteral(":/assets/lightbulb.svg"), this);
+    thinking_icon = new QSvgRenderer(themedSvg(QStringLiteral(":/assets/lightbulb.svg"), theme.text), this);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
 QSize ReasoningBlock::sizeHint() const {
     QFont prefix_font(font());
     prefix_font.setWeight(QFont::DemiBold);
     const int height = qMax(fontMetrics().height(), QFontMetrics(prefix_font).height())
-        + 2 * vertical_pad;
+        + 2*Sizing::vertical_pad;
     return {0, height};
 }
 void ReasoningBlock::append(const QString &text){
@@ -211,19 +207,12 @@ void ReasoningBlock::paintEvent(QPaintEvent *event) {
     const QFontMetrics prefix_metrics(prefix_font);
     const QFontMetrics content_metrics(content_font);
 
-    auto bg_rect = rect();
-    painter.setPen(QPen(QColor(255, 255, 255, 40), 0));
-    painter.setBrush(bg_color);
-
-    // Inset by half the stroke width to keep the outline inside the widget.
-    painter.drawRoundedRect(QRectF(bg_rect).adjusted(0.5, 0.5, -0.5, -0.5),
-                            corner_radius, corner_radius);
+    paintBackground(painter, rect(), theme.surface, theme.border);
 
     const QString prefix_text = "Thinking";
     const int prefix_width = prefix_metrics.horizontalAdvance(prefix_text);
 
-    auto text_rect = bg_rect.adjusted(horizontal_pad, vertical_pad,
-                                     -horizontal_pad, -vertical_pad);
+    QRect text_rect = padded_rect(rect());
     // Scale with the label font and keep the icon outside the stream's fade.
     const int icon_size = prefix_metrics.height();
     const QRectF icon_rect(text_rect.left(),
@@ -233,7 +222,7 @@ void ReasoningBlock::paintEvent(QPaintEvent *event) {
     text_rect.adjust(icon_size + text_gap / 2, 0, 0, 0);
     auto text_flags = Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine;
     painter.setFont(prefix_font);
-    painter.setPen(QColor("#ededed"));
+    painter.setPen(theme.text);
     painter.drawText(text_rect, text_flags, prefix_text);
 
     auto content_rect = text_rect.adjusted(prefix_width + text_gap, 0, 0, 0);
@@ -248,14 +237,14 @@ void ReasoningBlock::paintEvent(QPaintEvent *event) {
     painter.save();
     painter.setClipRect(content_rect);
     painter.setFont(content_font);
-    painter.setPen(QColor("#ababab"));
+    painter.setPen(theme.text_muted);
     painter.drawText(stream_rect, text_flags, reasoning_text);
 
     if (overflowing) {
         const int fade_width = qMin(48, content_rect.width());
         QLinearGradient fade(content_rect.left(), 0, content_rect.left() + fade_width, 0);
-        fade.setColorAt(0, bg_color);
-        QColor transparent_bg = bg_color;
+        fade.setColorAt(0, theme.surface);
+        QColor transparent_bg = theme.surface;
         transparent_bg.setAlpha(0);
         fade.setColorAt(1, transparent_bg);
         painter.fillRect(QRect(content_rect.topLeft(), QSize(fade_width, content_rect.height())), fade);
@@ -269,8 +258,10 @@ OutputTextBlock::OutputTextBlock(QWidget *parent) : QWidget(parent){
 
     label = new QLabel(this);
     label->setWordWrap(true);
+    auto policy = label->sizePolicy();
+    policy.setHorizontalPolicy(QSizePolicy::Ignored);
+    label->setSizePolicy(policy);
     layout->addWidget(label);
-
     setLayout(layout);
 }
 void OutputTextBlock::append(const QString &text){

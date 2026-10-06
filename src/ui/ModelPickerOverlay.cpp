@@ -9,26 +9,7 @@
 #include <QShortcut>
 #include <QVBoxLayout>
 
-namespace {
-constexpr int horizontal_pad = 10;
-constexpr int vertical_pad = 8;
-constexpr int corner_radius = 8;
-
-void paintBackground(QPainter& painter, const QWidget& widget, bool focused = false){
-    painter.setRenderHint(QPainter::Antialiasing);
-    const QRectF bounds = QRectF(widget.rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-
-    // Keep chat content from showing through the picker panel.
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(widget.palette().color(QPalette::Window));
-    painter.drawRoundedRect(bounds, corner_radius, corner_radius);
-
-    QColor border = widget.palette().color(QPalette::WindowText);
-    border.setAlpha(focused ? 100 : 40);
-    painter.setPen(QPen(border, 1.0));
-    painter.setBrush(QColor(52, 52, 52, 64));
-    painter.drawRoundedRect(bounds, corner_radius, corner_radius);
-}
+#include "Theme.hpp"
 
 class ModelPickerPanel : public QFrame {
     public:
@@ -37,10 +18,9 @@ class ModelPickerPanel : public QFrame {
     protected:
         void paintEvent(QPaintEvent*) override {
             QPainter painter(this);
-            paintBackground(painter, *this);
+            paintBackground(painter, rect(), theme.background, theme.border);
         }
 };
-}
 
 ModelPickerButton::ModelPickerButton(QWidget *parent) : QToolButton(parent){
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -48,21 +28,21 @@ ModelPickerButton::ModelPickerButton(QWidget *parent) : QToolButton(parent){
 }
 
 QSize ModelPickerButton::sizeHint() const {
-    return {fontMetrics().horizontalAdvance(text()) + 2 * horizontal_pad,
-            fontMetrics().height() + 2 * vertical_pad};
+    return {fontMetrics().horizontalAdvance(text()) + 2 * Sizing::horizontal_pad,
+            fontMetrics().height() + 2 * Sizing::vertical_pad};
 }
 
 QSize ModelPickerButton::minimumSizeHint() const {
-    return {2 * horizontal_pad + fontMetrics().maxWidth(), sizeHint().height()};
+    return {2 * Sizing::horizontal_pad + fontMetrics().maxWidth(), sizeHint().height()};
 }
 
 void ModelPickerButton::paintEvent(QPaintEvent*){
     QPainter painter(this);
-    paintBackground(painter, *this, hasFocus() || isDown());
+    paintBackground(painter, rect(), isDown() ? theme.hover : theme.surface, theme.border);
     painter.setFont(font());
     painter.setPen(palette().color(QPalette::WindowText));
-    const QRect text_rect = rect().adjusted(horizontal_pad, vertical_pad,
-                                            -horizontal_pad, -vertical_pad);
+
+    const QRect text_rect = padded_rect(rect());
     painter.setClipRect(text_rect);
     painter.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
                      fontMetrics().elidedText(text(), Qt::ElideRight, text_rect.width()));
@@ -75,11 +55,13 @@ ModelPickerOverlay::ModelPickerOverlay(QWidget *parent)
 
     model_field = new QLineEdit(panel);
     model_field->setFrame(false);
-    model_field->setStyleSheet("QLineEdit { background: transparent; }");
+    model_field->setStyleSheet(QStringLiteral("QLineEdit { background: %1; }")
+        .arg(theme.background.name()));
     model_field->setPlaceholderText("Model identifier");
 
     auto *panel_layout = new QVBoxLayout(panel);
-    panel_layout->setContentsMargins(horizontal_pad, vertical_pad, horizontal_pad, vertical_pad);
+    panel_layout->setContentsMargins(Sizing::horizontal_pad, Sizing::vertical_pad,
+                                     Sizing::vertical_pad, Sizing::vertical_pad);
     panel_layout->addWidget(model_field);
 
     auto *row = new QHBoxLayout;

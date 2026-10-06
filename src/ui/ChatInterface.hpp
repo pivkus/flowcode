@@ -35,7 +35,6 @@ class ReasoningBlock : public QWidget {
         void paintEvent(QPaintEvent *event) override;
     private:
         QString reasoning_text;
-        QColor bg_color;
         QSvgRenderer *thinking_icon = nullptr;
 
         static constexpr int horizontal_pad = 10;

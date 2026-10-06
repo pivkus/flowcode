@@ -1,4 +1,5 @@
 #include "Sidebar.hpp"
+#include "Theme.hpp"
 
 #include <QPainter>
 #include <QPushButton>
@@ -8,10 +9,6 @@
 namespace {
     constexpr int menuItemPadding = 6; // px
     constexpr int menuItemBottomGap = 4;
-    // TODO: Hardcoding colors for now, Qt gets pallete colors from the OS somehow so it's not
-    // consistant across platforms - figure out how to deal with colors and define a custom pallete
-    const QColor menuItemColor{"#3c3c3c"};
-    const QColor menuItemTextColor{"#e1e1e1"};
 }
 
 QSize MenuItemDelegate::sizeHint(const QStyleOptionViewItem& opt,
@@ -25,9 +22,11 @@ QSize MenuItemDelegate::sizeHint(const QStyleOptionViewItem& opt,
 void MenuItemDelegate::paint(QPainter *p,
                              const QStyleOptionViewItem& opt,
                              const QModelIndex& idx) const {
+    bool is_hovered = (opt.state & QStyle::State_MouseOver) || 
+                      (opt.state & QStyle::State_Selected);
 
     auto to_fill = opt.rect.adjusted(0, 0, 0, -menuItemBottomGap);
-    p->fillRect(to_fill, menuItemColor);
+    paintBackground(*p, to_fill, is_hovered ? theme.hover : theme.surface);
     
     auto to_write = to_fill.adjusted(menuItemPadding, 0, -menuItemPadding, 0);
     // adds "..." to the right if the text is too long to fit in width
@@ -37,7 +36,7 @@ void MenuItemDelegate::paint(QPainter *p,
         to_write.width()
     );
 
-    p->setPen(menuItemTextColor);
+    p->setPen(theme.text);
     p->drawText(to_write, Qt::AlignLeft | Qt::AlignVCenter, text);
 
 }
@@ -53,11 +52,11 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
     setAttribute(Qt::WA_StyledBackground, true);
     
     setFixedWidth(200);
-    // setStyleSheet("Sidebar { background: #d0d0d0; }");
 
     root = new QVBoxLayout(this);
 
     menu_list = new QListWidget(this);
+    menu_list->setMouseTracking(true);
     menu_list->setItemDelegate(new MenuItemDelegate(menu_list));
 
     // Qt keeps track of "current" item, changes it on click, on insertion of first item it will became

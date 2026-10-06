@@ -23,7 +23,7 @@ class ModelPickerOverlay : public QWidget {
     public:
         explicit ModelPickerOverlay(QWidget *parent = nullptr);
         void openPicker();
-        QString selected_model = "qwen/qwen3.8-27b:free";
+        QString selected_model = "nvidia/nemotron-3.5-lightning:free";
     signals:
         void modelSelected(const QString &model);
         void dismissed();
