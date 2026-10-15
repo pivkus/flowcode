@@ -19,11 +19,11 @@
 
 class Harness::Impl {
 public:
-    Impl();
+    explicit Impl(std::string system_prompt);
     ~Impl();
     void setMessageCallback(MessageCallback cb);
-    void pushMessage(fromUIMessage msg);
-    std::optional<toUIMessage> popMessage();
+    void sendMessage(fromUIMessage msg);
+    std::optional<toUIMessage> receiveMessage();
 private:
     void executeEffects(Effects&& effects);
     void coordinatorWorker(std::stop_token stop);
@@ -35,6 +35,8 @@ private:
         CurlRuntime(const CurlRuntime&) = delete;
         CurlRuntime& operator=(const CurlRuntime&) = delete;
     };
+
+    const std::string system_prompt;
 
     // Initialized before curl users; cleaned up after all workers have joined.
     CurlRuntime curl_runtime;

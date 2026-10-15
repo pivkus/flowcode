@@ -4,13 +4,13 @@
 #include <utility>
 #include <algorithm>
 
-Session::Session(Uuid id, SchemaMapPtr allowed_tools)
+Session::Session(Uuid id, SchemaMapPtr allowed_tools, std::string system_prompt)
 : session_id(id), tool_schemas(std::move(allowed_tools))
 {
 
     TurnPtr sys = std::make_shared<Turn>(SystemTurn {
         .tid = 0,
-        .text = "You are a helpful assistant the users answering questions"
+        .text = std::move(system_prompt)
     });
 
     history.push_back(std::move(sys));

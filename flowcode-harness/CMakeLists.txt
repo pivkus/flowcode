@@ -37,3 +37,8 @@ target_link_libraries(flowcode-harness
     PUBLIC nlohmann_json
     PRIVATE reproc++ CURL::libcurl
 )
+
+# Temporary development location; packaging will supply the prompt at release time.
+target_compile_definitions(flowcode-harness PRIVATE
+    FLOWCODE_SYSTEM_PROMPT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/system-prompt.md"
+)

@@ -1,7 +1,10 @@
+#include <fstream>
+#include <sstream>
 #include <print>
 #include <stdexcept>
 
 #include <HarnessImpl.hpp>
+#include <Log.hpp>
 
 // TODO: is there an easier way to include all of them?
 #include <tools/BashTool.hpp>
@@ -20,7 +23,9 @@ Harness::Impl::CurlRuntime::~CurlRuntime(){
     curl_global_cleanup();
 }
 
-Harness::Impl::Impl(){
+Harness::Impl::Impl(std::string system_prompt)
+    : system_prompt(std::move(system_prompt))
+{
 
     auto wakeCoordinator = [this]{
         {
@@ -49,8 +54,8 @@ Harness::Impl::~Impl(){
 }
 
 void Harness::Impl::setMessageCallback(MessageCallback cb){ toUIQueue.setCallback(cb); }
-void Harness::Impl::pushMessage(fromUIMessage msg){ fromUIQueue.enqueue(std::move(msg)); }
-std::optional<toUIMessage> Harness::Impl::popMessage(){ return toUIQueue.dequeue(); }
+void Harness::Impl::sendMessage(fromUIMessage msg){ fromUIQueue.enqueue(std::move(msg)); }
+std::optional<toUIMessage> Harness::Impl::receiveMessage(){ return toUIQueue.dequeue(); }
 
 void Harness::Impl::executeEffects(Effects&& effects){
     for (auto& e : effects){
@@ -84,7 +89,7 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
 
             std::visit(overloaded{
                 [&](SessionCreation& sc){
-                    sessions.try_emplace(sc.sid, sc.sid, allowed_tools);
+                    sessions.try_emplace(sc.sid, sc.sid, allowed_tools, system_prompt);
                 },
                 [&](PromptSubmission& ps){
                     Session& s = sessions.at(ps.sid);
@@ -142,7 +147,7 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
                     sessions.try_emplace(ls.sid, ls.sid, allowed_tools, ls.history); 
                     toUIQueue.enqueue(std::move(ls));
                 },
-                [&](GlobalError& e){ // TODO: handle the error here, maybe retry the listing
+                [&](GlobalError& e){
                 },
                 [&](SessionError& e){ toUIQueue.enqueue(std::move(e)); }
             }, *msg);
@@ -169,15 +174,46 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
 }
 
 
-Harness::Harness() : impl(std::make_unique<Impl>()) {}
+Harness::Harness() = default;
 Harness::~Harness() = default;
 
+bool Harness::init(){
+    if (init_attempted) return impl != nullptr;
+    init_attempted = true;
+
+    try {
+        std::ifstream file(FLOWCODE_SYSTEM_PROMPT_PATH, std::ios::binary);
+        if (!file.is_open()) throw std::runtime_error("Cannot open system prompt");
+
+        std::ostringstream contents;
+        char buffer[4096];
+        while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0){
+            contents.write(buffer, file.gcount());
+        }
+
+        if (file.bad() || !file.eof() || !contents || contents.str().find_first_not_of(" \t\r\n") == std::string::npos){
+            throw std::runtime_error("Cannot read system prompt or prompt is empty");
+        }
+
+        impl = std::make_unique<Impl>(contents.str());
+        return true;
+    } catch (const std::exception& e){
+        debug_print("Harness initialization failed ({}): {}", FLOWCODE_SYSTEM_PROMPT_PATH, e.what());
+        return false;
+    }
+}
+
+Harness::Impl& Harness::initializedImpl(){
+    if (!impl) throw std::logic_error("Harness::init() must succeed before using the harness");
+    return *impl;
+}
+
 void Harness::setMessageCallback(MessageCallback cb){
-    impl->setMessageCallback(std::move(cb));
+    initializedImpl().setMessageCallback(std::move(cb));
 }
 void Harness::pushMessage(fromUIMessage msg){
-    impl->pushMessage(std::move(msg));
+    initializedImpl().sendMessage(std::move(msg));
 }
 std::optional<toUIMessage> Harness::popMessage(){
-    return impl->popMessage();
+    return initializedImpl().receiveMessage();
 }

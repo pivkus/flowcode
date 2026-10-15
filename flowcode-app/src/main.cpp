@@ -25,8 +25,8 @@ int main(int argc, char *argv[]){
     loadEnvFile();
 
     Harness harness;
+    if (!harness.init()) return 1;
     Bridge bridge(harness);
-
     MainWindow window(bridge);
     window.show();
 

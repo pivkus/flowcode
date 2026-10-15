@@ -13,7 +13,7 @@ enum class TokensType{OUTPUT, REASONING};
 class Session {
 
     public:
-        Session(Uuid id, SchemaMapPtr allowed_tools);
+        Session(Uuid id, SchemaMapPtr allowed_tools, std::string system_prompt);
         Session(Uuid id, SchemaMapPtr allowed_tools, TurnVec history);
         Uuid session_id;
 
