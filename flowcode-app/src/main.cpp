@@ -3,8 +3,9 @@
 #include <QPalette>
 
 #include <flowcode/FlowcodeHarness.hpp>
-#include <EnvFile.hpp>
 
+#include <EnvFile.hpp>
+#include <Paths.hpp>
 #include <Theme.hpp>
 #include <Bridge.hpp>
 #include <MainWindow.hpp>
@@ -24,8 +25,14 @@ int main(int argc, char *argv[]){
 
     loadEnvFile();
 
-    Harness harness;
+    Harness harness(HarnessConfig {
+            paths::sessionsDir(),
+            FLOWCODE_SYSTEM_PROMPT_PATH,
+            getEnvVar("OPENROUTER_API_KEY")
+    });
+
     if (!harness.init()) return 1;
+
     Bridge bridge(harness);
     MainWindow window(bridge);
     window.show();

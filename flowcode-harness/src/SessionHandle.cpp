@@ -7,13 +7,13 @@
 
 
 
-SessionHandle::SessionHandle(Uuid id, ConcurrentQueue<fromNetworkMessage> *queue)
-: session_id(id), out_queue(queue)
+SessionHandle::SessionHandle(
+    Uuid id, 
+    ConcurrentQueue<fromNetworkMessage> *queue,
+    const HarnessConfig& config
+)
+: session_id(id), out_queue(queue), config(config)
 {
-
-    const char *api_key = std::getenv("OPENROUTER_API_KEY");
-    if (!api_key) throw std::runtime_error("OPENROUTER_API_KEY environment variable not set");
-
     handle = curl_easy_init();
 
     if (!handle) throw std::runtime_error("Failed to init a curl handle");
@@ -27,10 +27,8 @@ SessionHandle::SessionHandle(Uuid id, ConcurrentQueue<fromNetworkMessage> *queue
     headers = nullptr;
     headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    headers = curl_slist_append(headers, (std::string("Authorization: Bearer ") + api_key).c_str());
     
     curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
-
 }
 
 SessionHandle::~SessionHandle(){
@@ -66,6 +64,19 @@ void SessionHandle::resetRequestState(){
 void SessionHandle::prepareMessage(toNetworkMessage& request){
 
     resetRequestState();
+
+    const auto key = config.getOpenrouterKey();
+    if (!key || key->empty()){
+        sendError("OpenRouter API key is not configured", false);
+        return;
+    }
+
+    // Cached handles must use the latest credential for every request.
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, nullptr);
+    curl_slist_free_all(headers);
+    headers = curl_slist_append(nullptr, "Content-Type: application/json");
+    headers = curl_slist_append(headers, ("Authorization: Bearer " + *key).c_str());
+    curl_easy_setopt(handle, CURLOPT_HTTPHEADER, headers);
 
     // TODO: these thing should be passed in the request
     json_payload["model"] = request.model;

@@ -7,15 +7,19 @@
 
 #include <IoWorker.hpp>
 #include <Log.hpp>
-#include <Paths.hpp>
 
 #include <json.hpp>
 
 namespace fs = std::filesystem;
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
-IoWorker::IoWorker(ConcurrentQueue<toIoMessage>& in, ConcurrentQueue<fromIoMessage>& out)
-    : in(in), out(out) {
+IoWorker::IoWorker(
+    const HarnessConfig& config,
+    ConcurrentQueue<toIoMessage>& in, 
+    ConcurrentQueue<fromIoMessage>& out
+)
+    : in(in), out(out), config(config) 
+{
     thread = std::jthread([this](std::stop_token stop){ run(stop); });
 }
 
@@ -40,7 +44,7 @@ void IoWorker::run(std::stop_token stop){
 }
 
 void IoWorker::listSessions(){
-    const auto& path = paths::sessionsDir();
+    const auto& path = config.persistance_dir;
     std::vector<Uuid> res;
 
     // Filesystem operations might throw
@@ -70,7 +74,7 @@ void IoWorker::listSessions(){
 
 void IoWorker::persistTurns(Uuid sid, TurnVec turns){
     // Get directory of the session
-    fs::path dir_path = paths::sessionsDir() / sid.to_string();
+    fs::path dir_path = config.persistance_dir / sid.to_string();
 
     std::ofstream file;
     // Make file operation throw instead of returning errors for easier handleing
@@ -258,7 +262,7 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
 
 void IoWorker::loadSession(Uuid sid){
     
-    fs::path path = paths::sessionsDir() / sid.to_string() / "history.jsonl";
+    fs::path path = config.persistance_dir / sid.to_string() / "history.jsonl";
     std::ifstream history_file(path);
 
     if (!history_file.is_open() || history_file.fail()){

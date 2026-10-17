@@ -7,11 +7,16 @@
 #include <ConcurrentQueue.hpp>
 #include <InternalMessages.hpp>
 #include <flowcode/Uuid.hpp>
+#include <flowcode/FlowcodeHarness.hpp>
 
 // Owns the io thread: all blocking filesystem work for session persistence.
 class IoWorker {
     public:
-        IoWorker(ConcurrentQueue<toIoMessage>& in, ConcurrentQueue<fromIoMessage>& out);
+        IoWorker(
+            const HarnessConfig& config,
+            ConcurrentQueue<toIoMessage>& in, 
+            ConcurrentQueue<fromIoMessage>& out
+        );
         ~IoWorker();
 
     private:
@@ -28,5 +33,7 @@ class IoWorker {
 
         ConcurrentQueue<toIoMessage>& in;
         ConcurrentQueue<fromIoMessage>& out;
+        const HarnessConfig& config;
+
         std::jthread thread;
 };

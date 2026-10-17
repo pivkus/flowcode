@@ -10,12 +10,17 @@
 #include <ConcurrentQueue.hpp>
 #include <InternalMessages.hpp>
 #include <flowcode/Uuid.hpp>
+#include <flowcode/FlowcodeHarness.hpp>
 
 using json = nlohmann::json;
 
 class SessionHandle {
     public:
-        SessionHandle(Uuid id, ConcurrentQueue<fromNetworkMessage> *queue);
+        SessionHandle(
+            Uuid id, 
+            ConcurrentQueue<fromNetworkMessage> *queue, 
+            const HarnessConfig& config
+        );
         ~SessionHandle();
 
         // Delete copy/move operations so the object cant accidentaly change address in memory
@@ -58,6 +63,7 @@ class SessionHandle {
 
         Uuid session_id;
         ConcurrentQueue<fromNetworkMessage> *out_queue;
+        const HarnessConfig& config;
 
         // State for collecting incomming tool_call chunks
         struct ToolSlot {

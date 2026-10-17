@@ -1,8 +1,11 @@
 #include <NetworkWorker.hpp>
 #include <SessionHandle.hpp>
 
-NetworkWorker::NetworkWorker(ConcurrentQueue<toNetworkMessage>& in, ConcurrentQueue<fromNetworkMessage>& out)
-: in(in), out(out)
+NetworkWorker::NetworkWorker(
+    const HarnessConfig& config, 
+    ConcurrentQueue<toNetworkMessage>& in, 
+    ConcurrentQueue<fromNetworkMessage>& out)
+: in(in), out(out), config(config)
 {
     multi = curl_multi_init();
 
@@ -31,7 +34,7 @@ void NetworkWorker::run(std::stop_token stop){
             std::unique_ptr<SessionHandle>& slot = se_cache[req->sid];
             if (!slot){
                 try {
-                    slot = std::make_unique<SessionHandle>(req->sid, &out);
+                    slot = std::make_unique<SessionHandle>(req->sid, &out, config);
                 } catch (const std::exception &e){
                     // e.g. missing API key; report to the UI instead of crashing the worker
 
@@ -47,6 +50,11 @@ void NetworkWorker::run(std::stop_token stop){
 
             SessionHandle& connection = *slot;
             connection.prepareMessage(*req);
+            if (connection.pending_failure){
+                out.enqueue(std::move(*connection.pending_failure));
+                connection.resetRequestState();
+                continue;
+            }
             curl_multi_add_handle(multi, connection.raw());
         }
 

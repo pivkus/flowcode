@@ -23,8 +23,8 @@ Harness::Impl::CurlRuntime::~CurlRuntime(){
     curl_global_cleanup();
 }
 
-Harness::Impl::Impl(std::string system_prompt)
-    : system_prompt(std::move(system_prompt))
+Harness::Impl::Impl(std::string system_prompt, const HarnessConfig& config)
+    : system_prompt(std::move(system_prompt)), config(config)
 {
 
     auto wakeCoordinator = [this]{
@@ -174,7 +174,7 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
 }
 
 
-Harness::Harness() = default;
+Harness::Harness(HarnessConfig config) : config(config) {};
 Harness::~Harness() = default;
 
 bool Harness::init(){
@@ -182,7 +182,7 @@ bool Harness::init(){
     init_attempted = true;
 
     try {
-        std::ifstream file(FLOWCODE_SYSTEM_PROMPT_PATH, std::ios::binary);
+        std::ifstream file(config.system_prompt_path, std::ios::binary);
         if (!file.is_open()) throw std::runtime_error("Cannot open system prompt");
 
         std::ostringstream contents;
@@ -195,10 +195,10 @@ bool Harness::init(){
             throw std::runtime_error("Cannot read system prompt or prompt is empty");
         }
 
-        impl = std::make_unique<Impl>(contents.str());
+        impl = std::make_unique<Impl>(contents.str(), config);
         return true;
     } catch (const std::exception& e){
-        debug_print("Harness initialization failed ({}): {}", FLOWCODE_SYSTEM_PROMPT_PATH, e.what());
+        debug_print("Harness initialization failed ({}): {}", config.system_prompt_path.string(), e.what());
         return false;
     }
 }

@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <optional>
 #include <string>
 
 // Minimal .env loader: KEY=VALUE lines, '#' comments. Doesn't override existing env vars.
@@ -20,4 +21,11 @@ inline void loadEnvFile(const std::string &path = ".env"){
         std::string value = line.substr(eq + 1);
         setenv(key.c_str(), value.c_str(), 0);
     }
+}
+
+inline std::optional<std::string> getEnvVar(const std::string& var){
+    if (const char* env_p = std::getenv(var.data())){
+        return std::string(env_p);
+    }
+    return std::nullopt;
 }

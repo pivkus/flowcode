@@ -19,7 +19,7 @@
 
 class Harness::Impl {
 public:
-    explicit Impl(std::string system_prompt);
+    explicit Impl(std::string system_prompt, const HarnessConfig& config);
     ~Impl();
     void setMessageCallback(MessageCallback cb);
     void sendMessage(fromUIMessage msg);
@@ -37,6 +37,7 @@ private:
     };
 
     const std::string system_prompt;
+    const HarnessConfig& config;
 
     // Initialized before curl users; cleaned up after all workers have joined.
     CurlRuntime curl_runtime;
@@ -65,9 +66,9 @@ private:
     ConcurrentQueue<fromIoMessage> fromIoQueue;
 
     // Workers are destroyed before their queues, registry, and callback state.
-    NetworkWorker network_worker{toNetworkQueue, fromNetworkQueue};
+    NetworkWorker network_worker{config, toNetworkQueue, fromNetworkQueue};
     ExecutorWorker executor_worker{toToolQueue, fromToolQueue, tool_registry, executor_pool_size};
-    IoWorker io_worker{toIoQueue, fromIoQueue};
+    IoWorker io_worker{config, toIoQueue, fromIoQueue};
 
     // Stop the producer of worker tasks before destroying the workers.
     std::jthread coordinator_thread;
