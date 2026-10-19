@@ -13,6 +13,7 @@
 #include <Bridge.hpp>
 #include <ChatInterface.hpp>
 #include <ModelPickerOverlay.hpp>
+#include <AppSettings.hpp>
 
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -20,7 +21,7 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 class SessionWidget : public QWidget {
     Q_OBJECT
     public:
-        SessionWidget(Uuid id, QWidget *parent = nullptr);
+        SessionWidget(Uuid id, AppSettings &settings, QWidget *parent = nullptr);
 
         void renderSession(const TurnVec& history);
 
@@ -37,6 +38,7 @@ class SessionWidget : public QWidget {
 
     private:
         Uuid id;
+        AppSettings &settings;
         bool active_response = false;
 
         ModelPickerOverlay *model_picker = nullptr;
@@ -54,7 +56,7 @@ class SessionWidget : public QWidget {
 class SessionStack : public QStackedWidget {
     Q_OBJECT
     public:
-        SessionStack(Bridge& bridge, QWidget *parent = nullptr);
+        SessionStack(Bridge& bridge, AppSettings &settings, QWidget *parent = nullptr);
 
         SessionWidget* create(Uuid id, const TurnVec& history = {});
         SessionWidget* get(Uuid id);
@@ -73,4 +75,5 @@ class SessionStack : public QStackedWidget {
         QHash<Uuid, SessionWidget*> sessions;
 
         Bridge& bridge;
+        AppSettings &settings;
 };

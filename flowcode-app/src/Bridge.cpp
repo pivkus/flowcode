@@ -12,6 +12,11 @@ Bridge::Bridge(Harness& harness, QObject *parent)
     });
 }
 
+void Bridge::setOpenrouterKey(const QString &key) {
+    harness.config.setOpenrouterKey(key.isEmpty()
+        ? std::nullopt : std::optional<std::string>(key.toStdString()));
+}
+
 Bridge::~Bridge(){
     // Bridge is destroyed before Harness (declared after it in main), so the coordinator
     // thread is still running — unregister the callback so it can't call into a dead Harness

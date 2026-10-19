@@ -4,14 +4,16 @@
 
 #include <flowcode/FlowcodeHarness.hpp>
 
-#include <EnvFile.hpp>
 #include <Paths.hpp>
 #include <Theme.hpp>
 #include <Bridge.hpp>
 #include <MainWindow.hpp>
+#include <AppSettings.hpp>
 
 int main(int argc, char *argv[]){
     QApplication app(argc, argv);
+    app.setOrganizationName("flowcode");
+    app.setApplicationName("flowcode");
 
     QPalette palette = app.palette();
     // Set the default palette colors
@@ -23,18 +25,19 @@ int main(int argc, char *argv[]){
     palette.setColor(QPalette::PlaceholderText, theme.text_muted);
     app.setPalette(palette);
 
-    loadEnvFile();
-
     Harness harness(HarnessConfig {
             paths::sessionsDir(),
-            FLOWCODE_SYSTEM_PROMPT_PATH,
-            getEnvVar("OPENROUTER_API_KEY")
+            FLOWCODE_SYSTEM_PROMPT_PATH
     });
 
     if (!harness.init()) return 1;
 
     Bridge bridge(harness);
-    MainWindow window(bridge);
+    AppSettings settings;
+    QObject::connect(&settings, &AppSettings::openrouterKeySaved, &bridge, &Bridge::setOpenrouterKey);
+    bridge.setOpenrouterKey(settings.openrouterKey());
+
+    MainWindow window(bridge, settings);
     window.show();
 
     return app.exec();

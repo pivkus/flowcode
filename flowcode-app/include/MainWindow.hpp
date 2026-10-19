@@ -7,11 +7,12 @@
 
 class SessionStack;
 class Sidebar;
+class AppSettings;
 
 class MainWindow : public QWidget {
     Q_OBJECT
     public:
-        explicit MainWindow(Bridge& bridge, QWidget *parent = nullptr);
+        explicit MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent = nullptr);
     signals:
         void sessionCreated(Uuid id);
     private slots:

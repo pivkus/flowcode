@@ -12,8 +12,8 @@
 #include <ModelPickerOverlay.hpp>
 #include <Bridge.hpp>
 
-SessionWidget::SessionWidget(Uuid id, QWidget *parent)
- : QWidget(parent), id(id)
+SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
+ : QWidget(parent), id(id), settings(settings)
 {
     main_layout = new QVBoxLayout(this);
 
@@ -31,7 +31,7 @@ SessionWidget::SessionWidget(Uuid id, QWidget *parent)
     chat_layout->setStackingMode(QStackedLayout::StackAll);
     chat_layout->addWidget(chat_area);
 
-    model_picker = new ModelPickerOverlay(chat_container);
+    model_picker = new ModelPickerOverlay(settings, chat_container);
     chat_layout->addWidget(model_picker);
     model_picker->hide();
 
@@ -40,7 +40,7 @@ SessionWidget::SessionWidget(Uuid id, QWidget *parent)
     input_layout->setContentsMargins(0, 0, 0, 0);
 
     auto *model_button = new ModelPickerButton(input_group);
-    model_button->setText(model_picker->selected_model);
+    model_button->setText(settings.selectedModel().isEmpty() ? "Select Model" : settings.selectedModel());
     input_layout->addWidget(model_button, 0, Qt::AlignLeft);
     input_layout->addWidget(input_field);
 
@@ -48,7 +48,7 @@ SessionWidget::SessionWidget(Uuid id, QWidget *parent)
     main_layout->addWidget(input_group);
 
     connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::openPicker);
-    connect(model_picker, &ModelPickerOverlay::modelSelected, model_button, &QToolButton::setText);
+    connect(&settings, &AppSettings::selectedModelChanged, model_button, &QToolButton::setText);
     connect(model_picker, &ModelPickerOverlay::dismissed, this, [this]{ input_field->setFocus(); });
 
     setLayout(main_layout);
@@ -91,13 +91,17 @@ void SessionWidget::clearRetryError(){
 
 void SessionWidget::submitPrompt(){
     if (active_response) return;
+    if (!settings.hasOpenrouterKey() || settings.selectedModel().isEmpty()) {
+        model_picker->openPicker();
+        return;
+    }
     active_response = true;
     clearError();
 
     const QString prompt = input_field->text();
     chat->appendPrompt(prompt);
 
-    emit userPromptSent(id, prompt, model_picker->selected_model);
+    emit userPromptSent(id, prompt, settings.selectedModel());
     input_field->clear();
 }
 
@@ -121,8 +125,8 @@ void SessionWidget::renderSession(const TurnVec& history){
     }
 }
 
-SessionStack::SessionStack(Bridge& bridge, QWidget *parent)
-: QStackedWidget(parent), bridge(bridge)
+SessionStack::SessionStack(Bridge& bridge, AppSettings &settings, QWidget *parent)
+: QStackedWidget(parent), bridge(bridge), settings(settings)
 {
     connect(&bridge, &Bridge::tokensReceived, this, &SessionStack::routeTokens);
     connect(&bridge, &Bridge::reasoningReceived, this, &SessionStack::routeReasoning);
@@ -134,7 +138,7 @@ SessionStack::SessionStack(Bridge& bridge, QWidget *parent)
 }
 
 SessionWidget* SessionStack::create(Uuid id, const TurnVec& history){
-    SessionWidget *w = new SessionWidget(id);
+    SessionWidget *w = new SessionWidget(id, settings);
     sessions.insert(id, w);
 
     addWidget(w); // Adds it to the internal QStackedWidget list

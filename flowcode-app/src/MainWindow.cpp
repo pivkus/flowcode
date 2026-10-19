@@ -7,7 +7,7 @@
 #include <flowcode/Uuid.hpp> // TODO: this is temporary
 
 
-MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
+MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)
  : QWidget(parent), bridge(bridge) {
     setWindowTitle("Main Window");
     resize(800, 600);
@@ -20,7 +20,7 @@ MainWindow::MainWindow(Bridge& bridge, QWidget *parent)
     connect(sidebar, &Sidebar::sessionSelected, this, &MainWindow::focusSession);
     connect(sidebar, &Sidebar::newSession, this, &MainWindow::newSession);
     
-    stack = new SessionStack(bridge, this);
+    stack = new SessionStack(bridge, settings, this);
 
     root->addWidget(sidebar);
     root->addWidget(stack, 1);
