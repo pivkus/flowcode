@@ -27,7 +27,8 @@ int main(int argc, char *argv[]){
 
     Harness harness(HarnessConfig {
             paths::sessionsDir(),
-            FLOWCODE_SYSTEM_PROMPT_PATH
+            FLOWCODE_SYSTEM_PROMPT_PATH,
+            "nvidia/nemotron-3.5-lightning:free"
     });
 
     if (!harness.init()) return 1;

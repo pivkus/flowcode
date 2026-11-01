@@ -6,6 +6,7 @@
 
 struct PersistTurns         { Uuid sid; TurnVec turns; };
 struct ScheduleRetry        { Uuid sid; std::chrono::steady_clock::time_point deadline; };
+struct NameSessionReq       { Uuid sid; std::shared_ptr<TurnVec> snapshot; };
 
 struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;
                               SchemaMapPtr tools; std::string model; };
@@ -21,6 +22,7 @@ struct EffectNone { };
 using Effect = std::variant<
     EffectNone,
     SendRequest, 
+    NameSessionReq,
     OutputTokensDelta, 
     ReasoningTokensDelta, 
     TurnFinished,
@@ -30,12 +32,14 @@ using Effect = std::variant<
     SessionError, 
     SessionRetry,
     PersistTurns,
-    ScheduleRetry
+    ScheduleRetry,
+    SessionNamed
 >;
 using Effects = std::vector<Effect>;
 
 
 using fromNetworkMessage = std::variant<
+    SessionNamed,
     OutputTokensDelta, 
     ReasoningTokensDelta, 
     TurnFinished, 
@@ -56,7 +60,7 @@ using fromIoMessage = std::variant<
     SessionError
 >;
 
-using toNetworkMessage = SendRequest;
+using toNetworkMessage = std::variant<SendRequest, NameSessionReq>;
 
 struct fromToolMessage {
     Uuid       session_id;

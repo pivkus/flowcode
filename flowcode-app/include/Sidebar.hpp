@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <QWidget>
 #include <QVBoxLayout>
 #include <QStyledItemDelegate>
@@ -30,10 +31,13 @@ class Sidebar : public QWidget {
         void sessionSelected(Uuid id);
     private slots:
         void renderSessionList(std::vector<Uuid> list);
+        void nameSession(Uuid id, const QString& name);
     private:
-        QListWidgetItem* addSession(Uuid id);
+        QListWidgetItem* addSession(Uuid id, QString name = {});
         Bridge& bridge;
         QVBoxLayout *root = nullptr;
-        QListWidget *menu_list = nullptr;
+        QListWidget *menuList = nullptr;
+
+        std::map<Uuid, QListWidgetItem*> sessionItems;
 
 };

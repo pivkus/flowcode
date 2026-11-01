@@ -4,7 +4,7 @@
 #include <SessionWidget.hpp>
 #include <Sidebar.hpp>
 
-#include <flowcode/Uuid.hpp> // TODO: this is temporary
+#include <flowcode/Uuid.hpp>
 
 
 MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)

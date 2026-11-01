@@ -9,6 +9,7 @@
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
 struct ReasoningTokensDelta { Uuid sid; std::string delta; };
 struct TurnFinished         { Uuid sid; };
+struct SessionNamed         { Uuid sid; std::string name; };
 
 struct PromptSubmission     { Uuid sid; std::string prompt; std::string model; };
 struct SessionCreation      { Uuid sid; };
@@ -31,6 +32,7 @@ using toUIMessage = std::variant<
     EmitToolStarted,
     EmitToolResult, 
     TurnFinished, 
+    SessionNamed,
     SessionError, 
     SessionRetry,
     ListSessionsRes,

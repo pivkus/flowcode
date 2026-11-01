@@ -27,6 +27,7 @@ signals:
 
     void sessionListReceived(std::vector<Uuid> list);
     void sessionLoadReceived(Uuid id, TurnVec history);
+    void sessionNamed(Uuid id, const QString &name);
 public slots:
     void setOpenrouterKey(const QString &key);
     void userPromptSent(Uuid id, const QString &content, const QString &model);

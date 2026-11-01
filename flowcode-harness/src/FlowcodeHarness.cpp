@@ -1,3 +1,4 @@
+#include "flowcode/Messages.hpp"
 #include <fstream>
 #include <sstream>
 #include <print>
@@ -61,6 +62,7 @@ void Harness::Impl::executeEffects(Effects&& effects){
     for (auto& e : effects){
         std::visit(overloaded{
             [&](SendRequest& r){ toNetworkQueue.enqueue(std::move(r)); },
+            [&](NameSessionReq& r){ toNetworkQueue.enqueue(std::move(r)); },
             [&](OutputTokensDelta& o){ toUIQueue.enqueue(std::move(o)); },
             [&](ReasoningTokensDelta& r){ toUIQueue.enqueue(std::move(r)); },
             [&](EmitToolStarted& t){ toUIQueue.enqueue(std::move(t)); },
@@ -71,6 +73,7 @@ void Harness::Impl::executeEffects(Effects&& effects){
             [&](SessionRetry& r){ toUIQueue.enqueue(std::move(r)); },
             [&](PersistTurns& t){ toIoQueue.enqueue(std::move(t)); },
             [&](ScheduleRetry& r){ network_retries.insert_or_assign(r.sid, std::move(r)); },
+            [&](SessionNamed& n){ toUIQueue.enqueue(std::move(n)); },
             [&](EffectNone& e){},
         }, e);
     }
@@ -109,6 +112,7 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
 
             Effects effects;
             std::visit(overloaded{
+                [&](SessionNamed& named){ effects.push_back(std::move(named)); },
                 [&](OutputTokensDelta& ot){
                     Session& s = sessions.at(ot.sid);
                     effects = s.onTextDelta(std::move(ot.delta), TokensType::OUTPUT);

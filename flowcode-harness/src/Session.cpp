@@ -48,7 +48,8 @@ Effects Session::submitUserTurn(PromptSubmission ps) {
     if (!std::get_if<Idle>(&state)) return {};
 
     uint64_t turn_id = static_cast<uint64_t>(history.size());
-
+    const bool first_user_message =  turn_id <= 1;
+        
     TurnPtr turn = std::make_shared<Turn>(UserTurn {
         .tid = turn_id,
         .text = std::move(ps.prompt)
@@ -58,12 +59,17 @@ Effects Session::submitUserTurn(PromptSubmission ps) {
     state = AwaitingModel{};
     current_model = std::move(ps.model);
 
+    auto snapshot = snapshotHistory();
     Effects effects = { SendRequest{
         .sid = session_id,
-        .snapshot = snapshotHistory(),
+        .snapshot = snapshot,
         .tools = tool_schemas,
         .model = current_model
     } };
+
+    if (first_user_message) {
+        effects.push_back(NameSessionReq{ .sid = session_id, .snapshot = std::move(snapshot) });
+    }
 
     persistPending(effects);
     return effects;

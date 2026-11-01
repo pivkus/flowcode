@@ -61,7 +61,7 @@ void SessionHandle::resetRequestState(){
 
 
 
-void SessionHandle::prepareMessage(toNetworkMessage& request){
+void SessionHandle::prepareMessage(SendRequest& request){
 
     resetRequestState();
 

@@ -12,18 +12,22 @@
 struct HarnessConfig {
     HarnessConfig(std::filesystem::path persistance_dir,
                   std::filesystem::path system_prompt_path,
-                  std::optional<std::string> openrouter_key = std::nullopt)
+                  std::string naming_model,
+                  std::optional<std::string> openrouter_key = std::nullopt
+                  )
         : persistance_dir(std::move(persistance_dir)),
           system_prompt_path(std::move(system_prompt_path)),
+          naming_model(naming_model),
           openrouter_key(std::move(openrouter_key)) {}
 
     // Each copy owns its credential and mutex.
     HarnessConfig(const HarnessConfig& other)
         : HarnessConfig(other.persistance_dir, other.system_prompt_path,
-                        other.getOpenrouterKey()) {}
+                        other.naming_model, other.getOpenrouterKey()) {}
 
     std::filesystem::path persistance_dir;
     std::filesystem::path system_prompt_path;
+    std::string naming_model;
 
     std::optional<std::string> getOpenrouterKey() const {
         std::lock_guard lock(key_mutex);

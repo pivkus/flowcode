@@ -30,7 +30,7 @@ class SessionHandle {
         SessionHandle(SessionHandle&&)                 = delete;
         SessionHandle& operator=(SessionHandle&&)      = delete;
 
-        void prepareMessage(toNetworkMessage& request);
+        void prepareMessage(SendRequest& request);
         void completeMessage();
         void sendError(std::string errmsg, bool retry);
 
