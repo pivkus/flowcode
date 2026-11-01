@@ -35,6 +35,7 @@ void IoWorker::run(std::stop_token stop){
         if (!msg) continue;
 
         std::visit(overloaded{
+            [&](SessionNamed& named){ persistName(named.sid, named.name); },
             [&](ListSessionsReq& ls){ listSessions(); },
             [&](PersistTurns& pt){ persistTurns(pt.sid, std::move(pt.turns)); },
             [&](LoadSessionReq& ls){ loadSession(ls.sid); }
@@ -70,6 +71,21 @@ void IoWorker::listSessions(){
     std::sort(res.begin(), res.end(), std::greater<>());
 
     out.enqueue(ListSessionsRes { .uuids = std::move(res) });
+}
+
+void IoWorker::persistName(Uuid sid, const std::string& name){
+    try {
+        const fs::path dir = config.persistance_dir / sid.to_string();
+        fs::create_directories(dir);
+
+        std::ofstream file;
+        file.exceptions(std::ios::failbit | std::ios::badbit);
+        file.open(dir / "name.txt", std::ios::out | std::ios::trunc);
+        file << name;
+        file.close();
+    } catch (const std::exception& e) {
+        debug_print("Unable to persist session name for {}: {}", sid, e.what());
+    }
 }
 
 void IoWorker::persistTurns(Uuid sid, TurnVec turns){

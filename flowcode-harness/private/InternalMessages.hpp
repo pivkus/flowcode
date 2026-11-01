@@ -48,6 +48,7 @@ using fromNetworkMessage = std::variant<
 >;
 
 using toIoMessage = std::variant<
+    SessionNamed,
     ListSessionsReq,
     PersistTurns,
     LoadSessionReq

@@ -29,6 +29,7 @@ class IoWorker {
 
 
         void persistTurns(Uuid sid, TurnVec turns);
+        void persistName(Uuid sid, const std::string& name);
         std::string getJSONLine(TurnPtr turn);
 
         ConcurrentQueue<toIoMessage>& in;

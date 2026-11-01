@@ -73,7 +73,10 @@ void Harness::Impl::executeEffects(Effects&& effects){
             [&](SessionRetry& r){ toUIQueue.enqueue(std::move(r)); },
             [&](PersistTurns& t){ toIoQueue.enqueue(std::move(t)); },
             [&](ScheduleRetry& r){ network_retries.insert_or_assign(r.sid, std::move(r)); },
-            [&](SessionNamed& n){ toUIQueue.enqueue(std::move(n)); },
+            [&](SessionNamed& n){
+                toIoQueue.enqueue(n);
+                toUIQueue.enqueue(std::move(n));
+            },
             [&](EffectNone& e){},
         }, e);
     }
