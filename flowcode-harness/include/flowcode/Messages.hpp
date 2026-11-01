@@ -14,7 +14,7 @@ struct SessionNamed         { Uuid sid; std::string name; };
 struct PromptSubmission     { Uuid sid; std::string prompt; std::string model; };
 struct SessionCreation      { Uuid sid; };
 
-struct ListSessionsRes      { std::vector<Uuid> uuids; };
+struct ListSessionsRes      { std::vector<Uuid> uuids; std::vector<std::string> names; };
 struct ListSessionsReq      {};
 
 struct LoadSessionReq       { Uuid sid; };

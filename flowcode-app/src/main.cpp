@@ -28,7 +28,8 @@ int main(int argc, char *argv[]){
     Harness harness(HarnessConfig {
             paths::sessionsDir(),
             FLOWCODE_SYSTEM_PROMPT_PATH,
-            "nvidia/nemotron-3.5-lightning:free"
+            //"google/gemma-4-26b-a4b-it:free"
+            "deepseek/deepseek-v4.1-flash-1017"
     });
 
     if (!harness.init()) return 1;

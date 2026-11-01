@@ -30,7 +30,7 @@ class Sidebar : public QWidget {
         void sessionsListRequested();
         void sessionSelected(Uuid id);
     private slots:
-        void renderSessionList(std::vector<Uuid> list);
+        void renderSessionList(std::vector<Uuid> list, std::vector<std::string> names);
         void nameSession(Uuid id, const QString& name);
     private:
         QListWidgetItem* addSession(Uuid id, QString name = {});

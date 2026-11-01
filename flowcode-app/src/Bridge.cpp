@@ -58,7 +58,7 @@ void Bridge::processMessages(){
                 [&](SessionRetry& r){ emit responseRetry(r.sid, QString::fromStdString(r.msg), r.deadline); },
                 [&](TurnFinished& tf){ emit responseFinished(tf.sid); },
                 [&](SessionNamed& sn){ emit sessionNamed(sn.sid, QString::fromStdString(sn.name)); },
-                [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids)); },
+                [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids), std::move(ls.names)); },
                 [&](LoadSessionRes& ls){ emit sessionLoadReceived(ls.sid, std::move(ls.history)); },
         }, *msg);
     }

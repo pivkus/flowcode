@@ -1,12 +1,13 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QString>
+#include <QSignalBlocker>
 
 #include <Sidebar.hpp>
 #include <Theme.hpp>
 
 namespace {
-    constexpr int menuItemPadding = 6; // px
+    constexpr int menuItemPadding = 10; // px
     constexpr int menuItemBottomGap = 4;
 }
 
@@ -21,12 +22,12 @@ QSize MenuItemDelegate::sizeHint(const QStyleOptionViewItem& opt,
 void MenuItemDelegate::paint(QPainter *p,
                              const QStyleOptionViewItem& opt,
                              const QModelIndex& idx) const {
-    bool is_hovered = (opt.state & QStyle::State_MouseOver) || 
+    bool is_hovered = (opt.state & QStyle::State_MouseOver) ||
                       (opt.state & QStyle::State_Selected);
 
     auto to_fill = opt.rect.adjusted(0, 0, 0, -menuItemBottomGap);
     paintBackground(*p, to_fill, is_hovered ? theme.hover : theme.surface);
-    
+
     auto to_write = to_fill.adjusted(menuItemPadding, 0, -menuItemPadding, 0);
     // adds "..." to the right if the text is too long to fit in width
     auto text = opt.fontMetrics.elidedText(
@@ -47,28 +48,34 @@ Sidebar::Sidebar(Bridge& bridge, QWidget *parent)
     connect(&bridge, &Bridge::sessionListReceived, this, &Sidebar::renderSessionList);
     connect(&bridge, &Bridge::sessionNamed, this, &Sidebar::nameSession);
 
-    
-    // this attribute is needed to draw the backgrounf using style sheets
+
+    // Draw the sidebar surface independently of the session background.
     setAttribute(Qt::WA_StyledBackground, true);
-    
-    setFixedWidth(200);
+    setObjectName("sidebar");
+    setStyleSheet(QString("QWidget#sidebar { background-color: %1; }")
+                      .arg(theme.surface.name()));
+
+    setFixedWidth(300);
 
     root = new QVBoxLayout(this);
 
     menuList = new QListWidget(this);
+    auto listPalette = menuList->palette();
+    listPalette.setColor(QPalette::Base, theme.surface);
+    menuList->setPalette(listPalette);
     menuList->setMouseTracking(true);
     menuList->setItemDelegate(new MenuItemDelegate(menuList));
 
-    // Qt keeps track of "current" item, changes it on click, on insertion of first item it will became
-    // current and get loaded - this is good right now
+    // Load sessions when the user changes the current item.
     connect(menuList, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *cur){
         if (!cur) return;
         // Load the Uuid from the list item
         auto id = cur->data(Qt::UserRole).value<Uuid>();
         emit this->sessionSelected(id);
     });
-    
+
     auto *create_button = new QPushButton("Create Session", this);
+    create_button->setStyleSheet("padding: 10px;");
     connect(create_button, &QPushButton::clicked, this, &Sidebar::newSession);
 
     root->addWidget(create_button, 1);
@@ -90,16 +97,24 @@ QListWidgetItem* Sidebar::addSession(Uuid id, QString name){
     return item;
 }
 
-void Sidebar::addSelectSession(Uuid id){ 
+void Sidebar::addSelectSession(Uuid id){
     auto *item = addSession(id);
+    // addSession inserts the item to the end, move to the front
+    menuList->takeItem(menuList->row(item));
+    menuList->insertItem(0, item);
     menuList->setCurrentItem(item);
 }
 
-void Sidebar::renderSessionList(std::vector<Uuid> list){
+void Sidebar::renderSessionList(std::vector<Uuid> list, std::vector<std::string> names){
+    // Populating saved sessions must not automatically open the first one.
+    const QSignalBlocker blocker(menuList);
     menuList->clear();
     sessionItems.clear();
 
-    for (const auto& uuid : list){ addSession(uuid); }
+    for (size_t i = 0; i < list.size(); ++i) {
+        addSession(list[i], QString::fromStdString(names[i]));
+
+    }
 }
 
 void Sidebar::nameSession(Uuid id, const QString& name){

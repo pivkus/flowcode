@@ -70,7 +70,22 @@ void IoWorker::listSessions(){
     // TODO: sort by latest activity not by just creation date
     std::sort(res.begin(), res.end(), std::greater<>());
 
-    out.enqueue(ListSessionsRes { .uuids = std::move(res) });
+    // Read in sorted UUID order so names and UUIDs have matching indices.
+    std::vector<std::string> names;
+    names.reserve(res.size());
+    for (const auto& sid : res) {
+        std::string name;
+        try {
+            std::ifstream file(path / sid.to_string() / "name.txt");
+            if (!std::getline(file, name) || file.bad()) name.clear();
+        } catch (const std::exception& e) {
+            debug_print("Unable to read session name for {}: {}", sid, e.what());
+        }
+        if (name.find_first_not_of(" \t\r\n") == std::string::npos) name = "Unnamed Session";
+        names.push_back(std::move(name));
+    }
+
+    out.enqueue(ListSessionsRes { .uuids = std::move(res), .names = std::move(names) });
 }
 
 void IoWorker::persistName(Uuid sid, const std::string& name){

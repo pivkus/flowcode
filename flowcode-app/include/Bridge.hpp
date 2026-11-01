@@ -25,7 +25,7 @@ signals:
     void responseError(Uuid id, const QString &content);
     void responseRetry(Uuid id, const QString &content, std::chrono::steady_clock::time_point deadline);
 
-    void sessionListReceived(std::vector<Uuid> list);
+    void sessionListReceived(std::vector<Uuid> list, std::vector<std::string> names);
     void sessionLoadReceived(Uuid id, TurnVec history);
     void sessionNamed(Uuid id, const QString &name);
 public slots:

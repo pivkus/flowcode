@@ -15,6 +15,8 @@ MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)
     connect(&bridge, &Bridge::sessionLoadReceived, this, &MainWindow::onSessionLoaded);
     
     QHBoxLayout *root = new QHBoxLayout(this);
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
     
     sidebar = new Sidebar(bridge, this);
     connect(sidebar, &Sidebar::sessionSelected, this, &MainWindow::focusSession);
@@ -28,6 +30,9 @@ MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)
     setLayout(root);
 
     connect(this, &MainWindow::sessionCreated, &bridge, &Bridge::sessionCreated);
+    // Sidebar renders the saved list first; then select a fresh startup session.
+    connect(&bridge, &Bridge::sessionListReceived, this, &MainWindow::newSession,
+            Qt::SingleShotConnection);
 }
 
 void MainWindow::newSession()
