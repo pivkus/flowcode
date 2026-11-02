@@ -7,6 +7,9 @@
 #include <QMouseEvent>
 #include <QWidget>
 #include <QStackedWidget>
+#include <QLabel>
+#include <flowcode/Messages.hpp>
+
 
 class AppSettings;
 
@@ -25,8 +28,12 @@ class ModelPickerOverlay : public QWidget {
     public:
         explicit ModelPickerOverlay(AppSettings &settings, QWidget *parent = nullptr);
         void openPicker();
+    public slots:
+        void modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models);
+        void refreshModels();
     signals:
         void dismissed();
+        void modelsListRequested();
     protected:
         void mousePressEvent(QMouseEvent *event) override;
     private:
@@ -37,7 +44,15 @@ class ModelPickerOverlay : public QWidget {
         void submitKey();
         void submitModel();
 
+        enum class State { Loading, Loaded, Failed };
+        void setModelState(State state);
+
         AppSettings &settings;
+        bool request_pending = false;
+        std::shared_ptr<std::vector<ModelInfo>> catalogue;
+        QStackedWidget *model_states = nullptr;
+        QLabel *loaded_status = nullptr;
+        QToolButton *refresh_button = nullptr;
         QFrame *panel = nullptr;
         QStackedWidget *pages = nullptr;
         QWidget *key_page = nullptr;

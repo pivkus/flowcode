@@ -42,6 +42,11 @@ void Bridge::sessionsListRequested()
     harness.pushMessage(ListSessionsReq {});
 }
 
+void Bridge::modelsListRequested()
+{
+    harness.pushMessage(ListModelsReq {});
+}
+
 void Bridge::sessionLoadRequested(Uuid id)
 {
     harness.pushMessage(LoadSessionReq { .sid = id });
@@ -60,6 +65,7 @@ void Bridge::processMessages(){
                 [&](SessionNamed& sn){ emit sessionNamed(sn.sid, QString::fromStdString(sn.name)); },
                 [&](ListSessionsRes& ls){ emit sessionListReceived(std::move(ls.uuids), std::move(ls.names)); },
                 [&](LoadSessionRes& ls){ emit sessionLoadReceived(ls.sid, std::move(ls.history)); },
+                [&](ListModelsRes& ls){ emit modelListReceived(std::move(ls.models)); },
         }, *msg);
     }
 }

@@ -50,11 +50,16 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
     connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::openPicker);
     connect(&settings, &AppSettings::selectedModelChanged, model_button, &QToolButton::setText);
     connect(model_picker, &ModelPickerOverlay::dismissed, this, [this]{ input_field->setFocus(); });
+    connect(model_picker, &ModelPickerOverlay::modelsListRequested, this, &SessionWidget::modelsListRequested);
 
     setLayout(main_layout);
 
     connect(input_field, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
 
+}
+
+void SessionWidget::modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models){
+    model_picker->modelListReceived(std::move(models));
 }
 
 void SessionWidget::finishResponse(){
@@ -144,6 +149,8 @@ SessionWidget* SessionStack::create(Uuid id, const TurnVec& history){
     addWidget(w); // Adds it to the internal QStackedWidget list
 
     connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPromptSent);
+    connect(w, &SessionWidget::modelsListRequested, &bridge, &Bridge::modelsListRequested);
+    connect(&bridge, &Bridge::modelListReceived, w, &SessionWidget::modelListReceived);
     return w;
 }
 

@@ -80,7 +80,7 @@ ModelPickerOverlay::ModelPickerOverlay(AppSettings &settings, QWidget *parent)
 
     connect(&settings, &AppSettings::openrouterKeySaved, this, [this]{
         key_field->clear();
-        showModelSelection();
+        if (isVisible()) showModelSelection();
     });
     connect(&settings, &AppSettings::selectedModelChanged, this, [this](const QString &model){
         model_field->setText(model);
@@ -117,6 +117,20 @@ QWidget *ModelPickerOverlay::createModelPage(){
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(new QLabel("Select a model", page));
 
+    model_states = new QStackedWidget(page);
+    model_states->addWidget(new QLabel("Loading models…", model_states));
+    loaded_status = new QLabel(model_states);
+    model_states->addWidget(loaded_status);
+    model_states->addWidget(new QLabel("Failed to load models. Try refreshing.", model_states));
+    layout->addWidget(model_states);
+
+    refresh_button = new QToolButton(page);
+    refresh_button->setText("Refresh");
+    connect(refresh_button, &QToolButton::clicked, this, &ModelPickerOverlay::refreshModels);
+    layout->addWidget(refresh_button, 0, Qt::AlignLeft);
+
+    layout->addWidget(new QLabel("Enter a model ID manually", page));
+
     model_field = new QLineEdit(page);
     model_field->setFrame(false);
     model_field->setStyleSheet(QStringLiteral("QLineEdit { background: %1; }")
@@ -147,6 +161,33 @@ void ModelPickerOverlay::showModelSelection(){
     model_field->selectAll();
     pages->setCurrentWidget(model_page);
     if (isVisible()) model_field->setFocus();
+    refreshModels();
+}
+
+void ModelPickerOverlay::setModelState(State state){
+    model_states->setCurrentIndex(static_cast<int>(state));
+    refresh_button->setEnabled(state != State::Loading);
+}
+
+void ModelPickerOverlay::refreshModels(){
+    if (request_pending || !settings.hasOpenrouterKey()) return;
+    request_pending = true;
+    catalogue.reset();
+    setModelState(State::Loading);
+    emit modelsListRequested();
+}
+
+void ModelPickerOverlay::modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models){
+    if (!request_pending) return;
+    request_pending = false;
+    catalogue = std::move(models);
+    if (!catalogue) {
+        setModelState(State::Failed);
+        return;
+    }
+    loaded_status->setText(QStringLiteral("Loaded %1 models. Model browser coming soon.")
+        .arg(static_cast<qulonglong>(catalogue->size())));
+    setModelState(State::Loaded);
 }
 
 void ModelPickerOverlay::submitKey(){

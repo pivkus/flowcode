@@ -31,7 +31,10 @@ class SessionWidget : public QWidget {
         void clearRetryError();
 
         ChatInterface *chat = nullptr;
+    public slots:
+        void modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models);
     signals:
+        void modelsListRequested();
         void userPromptSent(Uuid id, const QString &content, const QString &model);
     private slots:
         void submitPrompt();

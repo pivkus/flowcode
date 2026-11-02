@@ -1,10 +1,17 @@
 #pragma once
 #include <chrono>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 #include <flowcode/History.hpp>
 #include <flowcode/Uuid.hpp>
+
+struct ModelInfo {
+    std::string id; // "provider/name"
+    bool supports_reasoning;
+    std::vector<std::string> supported_efforts; // "low", "medium", "xhigh" ...
+};
 
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
 struct ReasoningTokensDelta { Uuid sid; std::string delta; };
@@ -16,6 +23,9 @@ struct SessionCreation      { Uuid sid; };
 
 struct ListSessionsRes      { std::vector<Uuid> uuids; std::vector<std::string> names; };
 struct ListSessionsReq      {};
+
+struct ListModelsReq        {};
+struct ListModelsRes        { std::shared_ptr<std::vector<ModelInfo>> models; };
 
 struct LoadSessionReq       { Uuid sid; };
 struct LoadSessionRes       { Uuid sid; TurnVec history; };
@@ -36,6 +46,7 @@ using toUIMessage = std::variant<
     SessionError, 
     SessionRetry,
     ListSessionsRes,
+    ListModelsRes,
     LoadSessionRes
 >;
 
@@ -43,6 +54,7 @@ using fromUIMessage = std::variant<
     SessionCreation, 
     PromptSubmission, 
     ListSessionsReq,
+    ListModelsReq,
     LoadSessionReq
 >;
 
