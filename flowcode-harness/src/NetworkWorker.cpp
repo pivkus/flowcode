@@ -1,3 +1,4 @@
+#include "flowcode/Messages.hpp"
 #include <NetworkWorker.hpp>
 #include <Log.hpp>
 #include <memory>
@@ -9,8 +10,8 @@ template<class... Ts> struct NetworkOverloaded : Ts... { using Ts::operator()...
 }
 
 HttpRequest::HttpRequest(std::string url, std::vector<std::string> headers,
-                         std::string payload, ResponseHandler handler)
-: url(std::move(url)), payload(std::move(payload)), handler(std::move(handler)) 
+                         ResponseHandler handler)
+: url(std::move(url)), handler(std::move(handler)) 
 {
     handle = curl_easy_init();
     if (!handle) throw std::runtime_error("Failed to init a CURL handle");
@@ -31,15 +32,26 @@ HttpRequest::HttpRequest(std::string url, std::vector<std::string> headers,
         check(curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION, &HttpRequest::writeCallback));
         check(curl_easy_setopt(handle, CURLOPT_WRITEDATA, this));
         check(curl_easy_setopt(handle, CURLOPT_PRIVATE, this));
-        check(curl_easy_setopt(handle, CURLOPT_POSTFIELDS, this->payload.c_str()));
-        check(curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE_LARGE,
-                              static_cast<curl_off_t>(this->payload.size())));
+        check(curl_easy_setopt(handle, CURLOPT_HTTPGET, 1L));
         check(curl_easy_setopt(handle, CURLOPT_NOSIGNAL, 1L));
     } catch (...) {
         curl_easy_cleanup(handle);
         curl_slist_free_all(headers_list);
         throw;
     }
+}
+
+HttpRequest::HttpRequest(std::string url, std::vector<std::string> headers,
+                         std::string payload, ResponseHandler handler)
+: HttpRequest(std::move(url), std::move(headers), std::move(handler))
+{
+    this->payload = std::move(payload);
+    const auto check = [](CURLcode code) {
+        if (code != CURLE_OK) throw std::runtime_error(curl_easy_strerror(code));
+    };
+    check(curl_easy_setopt(handle, CURLOPT_POSTFIELDS, this->payload.c_str()));
+    check(curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE_LARGE,
+                          static_cast<curl_off_t>(this->payload.size())));
 }
 
 HttpRequest::~HttpRequest(){
@@ -178,15 +190,28 @@ std::unique_ptr<HttpRequest> NetworkWorker::createNameSessionRequest(const NameS
     );
 }
 
+std::unique_ptr<HttpRequest> NetworkWorker::createModelsListRequest(const ListModelsReq& req) {
+    auto request = std::make_unique<HttpRequest>(
+        "https://openrouter.ai/api/v1/models",
+        std::vector<std::string>{"Accept: application/json"},
+        ModelsListHandler{out}
+    );
+    for (const auto result : {
+        curl_easy_setopt(request->raw(), CURLOPT_CONNECTTIMEOUT, 10L),
+        curl_easy_setopt(request->raw(), CURLOPT_TIMEOUT, 30L)
+    }) {
+        if (result != CURLE_OK) throw std::runtime_error(curl_easy_strerror(result));
+    }
+    return request;
+}
+
 void NetworkWorker::handleRequest(const toNetworkMessage& message){
     try {
-        const auto key = config.getOpenrouterKey();
-        if (!key || key->empty()) {
-            throw std::runtime_error("OpenRouter API key is not configured");
-        }
+        const auto key = config.getOpenrouterKey().value_or("");
         auto request = std::visit(NetworkOverloaded{
-            [this, &key](const SendRequest& req) { return createChatRequest(req, *key); },
-            [this, &key](const NameSessionReq& req) { return createNameSessionRequest(req, *key); }
+            [this, &key](const SendRequest& req) { return createChatRequest(req, key); },
+            [this, &key](const NameSessionReq& req) { return createNameSessionRequest(req, key); },
+            [this](const ListModelsReq& req){ return createModelsListRequest(req); }
         }, message);
 
         CURL* handle = request->raw();
@@ -205,6 +230,10 @@ void NetworkWorker::handleRequest(const toNetworkMessage& message){
             [&](const NameSessionReq&) {
                 // Naming failure must not fail the concurrent chat request.
                 debug_print("Session naming failed: {}", e.what());
+            },
+            [&](const ListModelsReq&) {
+                debug_print("Model list request failed: {}", e.what());
+                out.enqueue(ListModelsRes{ .models = nullptr });
             }
         }, message);
     }

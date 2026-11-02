@@ -1,5 +1,6 @@
 #pragma once
 
+#include "flowcode/Messages.hpp"
 #include <exception>
 #include <map>
 #include <memory>
@@ -12,7 +13,11 @@
 
 class HttpRequest {
     public:
-        // Owns the payload and headers for the entire transfer.
+        // GET request; owns the URL and headers for the entire transfer.
+        HttpRequest(std::string url, std::vector<std::string> headers,
+                    ResponseHandler handler);
+
+        // POST request; also owns the payload for the entire transfer.
         HttpRequest(std::string url, std::vector<std::string> headers,
                     std::string payload, ResponseHandler handler);
         ~HttpRequest();
@@ -55,6 +60,7 @@ private:
     void handleRequest(const toNetworkMessage& message);
     std::unique_ptr<HttpRequest> createChatRequest(const SendRequest& req, const std::string& key);
     std::unique_ptr<HttpRequest> createNameSessionRequest(const NameSessionReq& req, const std::string& key);
+    std::unique_ptr<HttpRequest> createModelsListRequest(const ListModelsReq& req);
 
     ConcurrentQueue<toNetworkMessage>& in;
     ConcurrentQueue<fromNetworkMessage>& out;

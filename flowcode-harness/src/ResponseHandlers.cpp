@@ -3,10 +3,30 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace {
 template<class... Ts> struct NetworkOverloaded : Ts... { using Ts::operator()...; };
+}
+
+namespace {
+const json* jArray(const json& parent, std::string_view key){
+    if (!parent.is_object() || !parent.contains(key)) return nullptr;
+    const json& a = parent[key];
+    return a.is_array() ? &a : nullptr;
+}
+const json* jObject(const json& parent, std::string_view key){
+    if (!parent.is_object() || !parent.contains(key)) return nullptr;
+    const json& o = parent[key];
+    return o.is_object() ? &o : nullptr;
+}
+const json* jString(const json& parent, std::string_view key){
+    if (!parent.is_object() || !parent.contains(key)) return nullptr;
+    const json& s = parent[key];
+    return s.is_string() ? &s : nullptr;
+}
+
 }
 
 static std::string_view toJSONType(ToolParamType type){
@@ -360,12 +380,11 @@ void ChatHandler::handleEvent(std::string_view event){
         }
 
         // Check for a top level error field that indicates provider error
-        auto error_it = parsed.find("error");
-        if (error_it != parsed.end() && error_it->is_object()){
-            auto message_it = error_it->find("message");
-            sendError(message_it != error_it->end() && message_it->is_string()
-                ? message_it->get<std::string>()
-                : "Provider error",
+        auto *error = jObject(parsed, "error");
+        if (error){
+            auto *message = jString(*error, "message");
+            sendError( 
+                message ? message->get<std::string>() : "Provider error",
                 true );
             return;
         }
@@ -374,45 +393,35 @@ void ChatHandler::handleEvent(std::string_view event){
         if (choices_it == parsed.end() || choices_it->empty()) return; // choices might be an empty array
         json &choice = choices_it.value()[0]; // non-const so token strings can be moved out below
 
-        auto fr_it = choice.find("finish_reason");
-        if (fr_it != choice.end() && fr_it->is_string()){
-            finish_reason = fr_it->get_ref<std::string&>();
-        }
+        auto *fr = jString(choice, "finish_reason");
+        if (fr) finish_reason = fr->get<std::string>();
 
-        auto nfr_it = choice.find("native_finish_reason");
-        if (nfr_it != choice.end() && nfr_it->is_string()){
-            native_finish_reason = std::move(nfr_it->get_ref<std::string&>());
-        }
+        auto *nfr = jString(choice, "native_finish_reason");
+        if (nfr) native_finish_reason = nfr->get<std::string>();
+        
 
         auto delta_it = choice.find("delta");
         if (delta_it == choice.end()) return;
 
-
-
-        auto content_it = delta_it->find("content");
-        if (content_it != delta_it->end() && content_it->is_string()){
-            std::string tokens = std::move(std::move(content_it->get_ref<std::string&>()));
-
+        auto *content = jString(*delta_it, "content");
+        if (content){
             out.enqueue(OutputTokensDelta {
                 .sid = sid,
-                .delta = std::move(tokens)
+                .delta = content->get<std::string>()
             });
         }
 
-        auto reasoning_it = delta_it->find("reasoning");
-        if (reasoning_it != delta_it->end() && reasoning_it->is_string()){
-            std::string tokens = std::move(reasoning_it->get_ref<std::string&>());
-
+        auto *reasoning = jString(*delta_it, "reasoning");
+        if (reasoning){
             out.enqueue(ReasoningTokensDelta {
                 .sid = sid,
-                .delta = std::move(tokens)
+                .delta = reasoning->get<std::string>()
             });
         }
 
-        auto toolcall_it = delta_it->find("tool_calls");
-        if (toolcall_it != delta_it->end() && toolcall_it->is_array()){
-            for (const auto& chunk : toolcall_it.value()){
-
+        auto* toolcall = jArray(*delta_it, "tool_calls");
+        if (toolcall){
+            for (const auto& chunk : *toolcall){
                 // "index" should reliably be present and is used to identify each call
                 // it may be ommited, 0 as the default
                 int index = 0;
@@ -423,26 +432,20 @@ void ChatHandler::handleEvent(std::string_view event){
 
                 ToolSlot& ts = tc_incomming[index];
 
-                auto id_it = chunk.find("id");
-                if (id_it != chunk.end() && id_it->is_string()){
-                    ts.id = id_it->get_ref<const std::string&>();
-                }
+                auto *id = jString(chunk, "id");
+                if (id) ts.id = id->get<std::string>();
 
                 // "function" might not be present, but we dont really care about those chunks anyways
-                auto function_it = chunk.find("function");
-                if (function_it == chunk.end()) continue;
+                auto function = jObject(chunk, "function");
+                if (!function) continue;
                 
                 // "name" is usually present only on the first chunk
-                auto name_it = function_it->find("name");
-                if (name_it != function_it->end() && name_it->is_string()){
-                    ts.name = name_it->get_ref<const std::string&>();
-                }
+                auto *name = jString(*function, "name");
+                if (name) ts.name = name->get<std::string>();
 
                 // "arguments" are json chunks that need to be appended
-                auto arg_it = function_it->find("arguments");
-                if (arg_it != function_it->end() && arg_it->is_string()){
-                    ts.args += arg_it->get_ref<const std::string&>();
-                }
+                auto *args = jString(*function, "arguments");
+                if (args) ts.args += args->get<std::string>();
 
             }
         }
@@ -460,30 +463,30 @@ void NamingHandler::onComplete(){
     const auto reject = [this](const char* message) {
         onFailure(HttpFailure{ .message = message });
     };
+
     const json response = json::parse(response_body, nullptr, false);
     if (!response.is_object() || response.contains("error")) {
         reject("Invalid session naming response");
         return;
     }
-    const auto choices = response.find("choices");
-    if (choices == response.end() || !choices->is_array() || choices->empty() ||
-        !(*choices)[0].is_object()) {
+    auto* choices = jArray(response, "choices");
+    if (!choices || choices->empty() || !(*choices)[0].is_object()) {
         reject("Session naming response has no choices");
         return;
     }
     const auto& choice = (*choices)[0];
-    const auto reason = choice.find("finish_reason");
-    if (reason != choice.end() && *reason != "stop") {
+    auto *reason = jString(choice, "finish_reason");
+    if (reason && *reason != "stop") {
         reject("Session naming response did not finish normally");
         return;
     }
-    const auto message = choice.find("message");
-    if (message == choice.end() || !message->is_object()) {
+    auto *message = jObject(choice, "message");
+    if (!message) {
         reject("Session naming response has no message");
         return;
     }
-    const auto content = message->find("content");
-    if (content == message->end() || !content->is_string()) {
+    auto *content = jString(*message, "content");
+    if (!content) {
         reject("Session naming response has no name");
         return;
     }
@@ -499,4 +502,61 @@ void NamingHandler::onComplete(){
 void NamingHandler::onFailure(const HttpFailure& failure){
     // Naming is optional; its failure must not change the chat request state.
     debug_print("Session naming failed: {}", failure.message);
+}
+
+
+ModelsListHandler::ModelsListHandler(ConcurrentQueue<fromNetworkMessage>& out)
+ : out(out) {}
+
+bool ModelsListHandler::onBytes(std::string_view bytes){
+    response_body.append(bytes);
+    return true;
+}
+
+void ModelsListHandler::onComplete(){
+    try {
+        const json response = json::parse(response_body);
+        if (!response.is_object() || response.contains("error")) {
+            throw std::runtime_error("Invalid model list response");
+        }
+    
+        auto *data = jArray(response, "data");
+        if (!data) throw std::runtime_error("\"data\" array not present");
+
+        auto models = std::make_shared<std::vector<ModelInfo>>();
+        models->reserve(data->size());
+        for (const auto& entry : *data) {
+            ModelInfo model{ .id = entry.at("id").get<std::string>(),
+                             .supports_reasoning = false };
+            if (model.id.empty()) continue;
+    
+            auto *reasoning = jObject(entry, "reasoning");
+            if (reasoning) {
+                model.supports_reasoning = true;
+                const auto efforts = reasoning->find("supported_efforts");
+                if (efforts != reasoning->end() && !efforts->is_null()) {
+                    model.supported_efforts = efforts->get<std::vector<std::string>>();
+                }
+            } else {
+                auto *parameters = jArray(entry, "supported_parameters");
+                if (parameters) {
+                    for (const auto& parameter : *parameters) {
+                        const auto& name = parameter.get_ref<const std::string&>();
+                        if (name == "reasoning" || name == "reasoning_effort") {
+                            model.supports_reasoning = true;
+                        }
+                    }
+                }
+            }
+            models->push_back(std::move(model));
+        }
+        out.enqueue(ListModelsRes{ .models = std::move(models) });
+    } catch (const std::exception& e) {
+        onFailure(HttpFailure{ .message = std::string("Failed to parse model list: ") + e.what() });
+    }
+}
+
+void ModelsListHandler::onFailure(const HttpFailure& failure){
+    debug_print("Model list request failed (HTTP {}): {}", failure.status, failure.message);
+    out.enqueue(ListModelsRes{ .models = nullptr });
 }

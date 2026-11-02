@@ -2,7 +2,7 @@
 #include <Log.hpp>
 
 #include <utility>
-#include <algorithm>
+
 
 Session::Session(Uuid id, SchemaMapPtr allowed_tools, std::string system_prompt)
 : session_id(id), tool_schemas(std::move(allowed_tools))

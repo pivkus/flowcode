@@ -57,7 +57,18 @@ private:
     ConcurrentQueue<fromNetworkMessage>& out;
 };
 
-using ResponseHandler = std::variant<ChatHandler, NamingHandler>;
+class ModelsListHandler {
+public:
+    ModelsListHandler(ConcurrentQueue<fromNetworkMessage>& out);
+    bool onBytes(std::string_view bytes);
+    void onComplete();
+    void onFailure(const HttpFailure& failure);
+private:
+    std::string response_body;
+    ConcurrentQueue<fromNetworkMessage>& out;
+};
+
+using ResponseHandler = std::variant<ChatHandler, NamingHandler, ModelsListHandler>;
 
 std::string buildChatPayload(const SendRequest& request);
 std::string buildSessionNamingPayload(const NameSessionReq& request,

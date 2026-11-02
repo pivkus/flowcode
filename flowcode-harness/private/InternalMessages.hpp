@@ -17,6 +17,7 @@ struct ToolExecute          { Uuid sid; uint64_t tid; ResolvedCall call; };
 struct GlobalError          { std::string msg; };
 struct RequestFailed        { Uuid sid; std::string msg; bool retry; };
 
+
 struct EffectNone { };
 
 using Effect = std::variant<
@@ -44,7 +45,9 @@ using fromNetworkMessage = std::variant<
     ReasoningTokensDelta, 
     TurnFinished, 
     ToolCallsMade, 
-    RequestFailed
+    RequestFailed,
+
+    ListModelsRes
 >;
 
 using toIoMessage = std::variant<
@@ -61,7 +64,11 @@ using fromIoMessage = std::variant<
     SessionError
 >;
 
-using toNetworkMessage = std::variant<SendRequest, NameSessionReq>;
+using toNetworkMessage = std::variant<
+    SendRequest, 
+    NameSessionReq,
+    ListModelsReq
+>;
 
 struct fromToolMessage {
     Uuid       session_id;

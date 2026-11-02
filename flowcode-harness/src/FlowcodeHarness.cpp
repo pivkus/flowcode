@@ -107,6 +107,9 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
                 },
                 [&](LoadSessionReq& ls){
                     toIoQueue.enqueue(std::move(ls));
+                },
+                [&](ListModelsReq& lm){
+                    toNetworkQueue.enqueue(std::move(lm));
                 }
             }, *msg);
         }
@@ -116,6 +119,8 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
             Effects effects;
             std::visit(overloaded{
                 [&](SessionNamed& named){ effects.push_back(std::move(named)); },
+                [&](ListModelsRes& models){ toUIQueue.enqueue(std::move(models)); },
+
                 [&](OutputTokensDelta& ot){
                     Session& s = sessions.at(ot.sid);
                     effects = s.onTextDelta(std::move(ot.delta), TokensType::OUTPUT);
