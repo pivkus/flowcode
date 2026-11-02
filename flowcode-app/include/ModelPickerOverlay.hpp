@@ -29,12 +29,13 @@ class ModelPickerOverlay : public QWidget {
     public:
         explicit ModelPickerOverlay(AppSettings &settings, QWidget *parent = nullptr);
         void openPicker();
+        void togglePicker();
     public slots:
-        void modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models);
-        void refreshModels();
+        void modelListReceived(ModelListPtr models);
+        void refreshModels(bool force);
     signals:
         void dismissed();
-        void modelsListRequested();
+        void modelsListRequested(bool force=false);
     protected:
         void mousePressEvent(QMouseEvent *event) override;
     private:
@@ -52,7 +53,7 @@ class ModelPickerOverlay : public QWidget {
 
         AppSettings &settings;
         bool request_pending = false;
-        std::shared_ptr<std::vector<ModelInfo>> catalogue;
+        ModelListPtr catalogue;
         QLabel *status_label = nullptr;
         QListWidget *model_list = nullptr;
         QToolButton *refresh_button = nullptr;

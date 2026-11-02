@@ -523,7 +523,7 @@ void ModelsListHandler::onComplete(){
         auto *data = jArray(response, "data");
         if (!data) throw std::runtime_error("\"data\" array not present");
 
-        auto models = std::make_shared<std::vector<ModelInfo>>();
+        auto models = std::make_shared<ModelList>();
         models->reserve(data->size());
         for (const auto& entry : *data) {
             ModelInfo model{ .id = entry.at("id").get<std::string>(),

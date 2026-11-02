@@ -157,7 +157,7 @@ QWidget *ModelPickerOverlay::createModelPage(){
         .arg(theme.surface.name(), theme.text.name(), theme.border.name())
         .arg(Sizing::corner_radius).arg(Sizing::vertical_pad).arg(Sizing::horizontal_pad)
         .arg(theme.hover.name(), theme.text_muted.name()));
-    connect(refresh_button, &QToolButton::clicked, this, &ModelPickerOverlay::refreshModels);
+    connect(refresh_button, &QToolButton::clicked, this, [&](){refreshModels(true);});
     layout->addWidget(refresh_button, 0, Qt::AlignLeft);
 
     connect(search_field, &QLineEdit::textChanged, this, &ModelPickerOverlay::filterModels);
@@ -180,6 +180,14 @@ QWidget *ModelPickerOverlay::createModelPage(){
     return page;
 }
 
+void ModelPickerOverlay::togglePicker(){
+    if (isVisible()) {
+        dismiss();
+    } else {
+        openPicker();
+    }
+}
+
 void ModelPickerOverlay::openPicker(){
     if (settings.hasOpenrouterKey()) {
         showModelSelection();
@@ -194,7 +202,7 @@ void ModelPickerOverlay::openPicker(){
 
 void ModelPickerOverlay::showModelSelection(){
     search_field->clear();
-    refreshModels();
+    refreshModels(false);
     if (isVisible()) search_field->setFocus();
 }
 
@@ -225,14 +233,14 @@ void ModelPickerOverlay::setState(State next){
     }
 }
 
-void ModelPickerOverlay::refreshModels(){
+void ModelPickerOverlay::refreshModels(bool force){
     if (request_pending || !settings.hasOpenrouterKey()) return;
     request_pending = true;
     setState(State::Loading);
-    emit modelsListRequested();
+    emit modelsListRequested(force);
 }
 
-void ModelPickerOverlay::modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models){
+void ModelPickerOverlay::modelListReceived(ModelListPtr models){
     if (!request_pending) return;
     request_pending = false;
     catalogue = std::move(models);

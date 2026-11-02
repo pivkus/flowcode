@@ -47,7 +47,7 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
     main_layout->addWidget(chat_container, 1);
     main_layout->addWidget(input_group);
 
-    connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::openPicker);
+    connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::togglePicker);
     connect(&settings, &AppSettings::selectedModelChanged, model_button, &QToolButton::setText);
     connect(model_picker, &ModelPickerOverlay::dismissed, this, [this]{ input_field->setFocus(); });
     connect(model_picker, &ModelPickerOverlay::modelsListRequested, this, &SessionWidget::modelsListRequested);
@@ -58,7 +58,7 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
 
 }
 
-void SessionWidget::modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models){
+void SessionWidget::modelListReceived(ModelListPtr models){
     model_picker->modelListReceived(std::move(models));
 }
 

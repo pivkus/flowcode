@@ -1,4 +1,5 @@
 #include "flowcode/Messages.hpp"
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <print>
@@ -109,7 +110,16 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
                     toIoQueue.enqueue(std::move(ls));
                 },
                 [&](ListModelsReq& lm){
-                    toNetworkQueue.enqueue(std::move(lm));
+                    // Try to return it from an in-memory cache if the list is not too stale
+                    auto now = std::chrono::steady_clock::now();
+                    if (model_list_cache && model_list_cache->models && 
+                        now < model_list_cache->expires_at && !lm.force_refresh){
+                        debug_print("Getting list from cache");
+                        toUIQueue.enqueue(ListModelsRes {
+                            .models = model_list_cache->models
+                        });
+                    }
+                    else toNetworkQueue.enqueue(std::move(lm));
                 }
             }, *msg);
         }
@@ -119,7 +129,15 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
             Effects effects;
             std::visit(overloaded{
                 [&](SessionNamed& named){ effects.push_back(std::move(named)); },
-                [&](ListModelsRes& models){ toUIQueue.enqueue(std::move(models)); },
+                [&](ListModelsRes& lm){
+                    if (lm.models) {
+                        model_list_cache = ModelListCache {
+                            .models = lm.models,
+                            .expires_at = std::chrono::steady_clock::now() + MODEL_LIST_TTL
+                        };
+                    }
+                    toUIQueue.enqueue(std::move(lm));
+                },
                 [&](OutputTokensDelta& ot){
                     Session& s = sessions.at(ot.sid);
                     effects = s.onTextDelta(std::move(ot.delta), TokensType::OUTPUT);

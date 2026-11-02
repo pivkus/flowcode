@@ -28,14 +28,14 @@ signals:
     void sessionListReceived(std::vector<Uuid> list, std::vector<std::string> names);
     void sessionLoadReceived(Uuid id, TurnVec history);
     void sessionNamed(Uuid id, const QString &name);
-    void modelListReceived(std::shared_ptr<std::vector<ModelInfo>> models);
+    void modelListReceived(ModelListPtr models);
 public slots:
     void setOpenrouterKey(const QString &key);
     void userPromptSent(Uuid id, const QString &content, const QString &model);
     void sessionCreated(Uuid id);
 
     void sessionsListRequested();
-    void modelsListRequested();
+    void modelsListRequested(bool force);
     void sessionLoadRequested(Uuid id);
 private:
     void processMessages();

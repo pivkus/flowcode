@@ -33,6 +33,9 @@ MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)
     // Sidebar renders the saved list first; then select a fresh startup session.
     connect(&bridge, &Bridge::sessionListReceived, this, &MainWindow::newSession,
             Qt::SingleShotConnection);
+
+    // Warm the shared model cache before the picker is opened.
+    bridge.modelsListRequested(false);
 }
 
 void MainWindow::newSession()

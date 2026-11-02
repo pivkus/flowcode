@@ -2,9 +2,11 @@
 
 #include <condition_variable>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <stop_token>
 #include <thread>
+#include <chrono>
 
 #include <curl/curl.h>
 
@@ -25,6 +27,7 @@ public:
     void sendMessage(fromUIMessage msg);
     std::optional<toUIMessage> receiveMessage();
 private:
+    
     void executeEffects(Effects&& effects);
     void coordinatorWorker(std::stop_token stop);
 
@@ -47,6 +50,13 @@ private:
 
     std::map<Uuid, ScheduleRetry> network_retries;
 
+    static constexpr auto MODEL_LIST_TTL = std::chrono::minutes{30};
+    struct ModelListCache {
+        ModelListPtr models;
+        std::chrono::steady_clock::time_point expires_at;
+    };
+    std::optional<ModelListCache> model_list_cache;
+    
     // Worker output callbacks use this state, so it must outlive every worker.
     std::mutex coord_mutex;
     bool coord_notified = false;

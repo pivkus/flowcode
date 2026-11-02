@@ -42,9 +42,9 @@ void Bridge::sessionsListRequested()
     harness.pushMessage(ListSessionsReq {});
 }
 
-void Bridge::modelsListRequested()
+void Bridge::modelsListRequested(bool force)
 {
-    harness.pushMessage(ListModelsReq {});
+    harness.pushMessage(ListModelsReq { .force_refresh = force });
 }
 
 void Bridge::sessionLoadRequested(Uuid id)

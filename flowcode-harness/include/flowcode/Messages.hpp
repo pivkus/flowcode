@@ -13,6 +13,9 @@ struct ModelInfo {
     std::vector<std::string> supported_efforts; // "low", "medium", "xhigh" ...
 };
 
+using ModelList = std::vector<ModelInfo>;
+using ModelListPtr = std::shared_ptr<const ModelList>;
+
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
 struct ReasoningTokensDelta { Uuid sid; std::string delta; };
 struct TurnFinished         { Uuid sid; };
@@ -24,8 +27,8 @@ struct SessionCreation      { Uuid sid; };
 struct ListSessionsRes      { std::vector<Uuid> uuids; std::vector<std::string> names; };
 struct ListSessionsReq      {};
 
-struct ListModelsReq        {};
-struct ListModelsRes        { std::shared_ptr<std::vector<ModelInfo>> models; };
+struct ListModelsReq        { bool force_refresh = false; };
+struct ListModelsRes        { ModelListPtr models; };
 
 struct LoadSessionReq       { Uuid sid; };
 struct LoadSessionRes       { Uuid sid; TurnVec history; };
