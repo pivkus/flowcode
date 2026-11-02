@@ -120,7 +120,6 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
             std::visit(overloaded{
                 [&](SessionNamed& named){ effects.push_back(std::move(named)); },
                 [&](ListModelsRes& models){ toUIQueue.enqueue(std::move(models)); },
-
                 [&](OutputTokensDelta& ot){
                     Session& s = sessions.at(ot.sid);
                     effects = s.onTextDelta(std::move(ot.delta), TokensType::OUTPUT);

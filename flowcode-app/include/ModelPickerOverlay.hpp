@@ -8,6 +8,7 @@
 #include <QWidget>
 #include <QStackedWidget>
 #include <QLabel>
+#include <QListWidget>
 #include <flowcode/Messages.hpp>
 
 
@@ -43,20 +44,22 @@ class ModelPickerOverlay : public QWidget {
         void showModelSelection();
         void submitKey();
         void submitModel();
+        void filterModels();
 
-        enum class State { Loading, Loaded, Failed };
-        void setModelState(State state);
+        enum class State { NoKey, Loading, Failed, Loaded };
+        void setState(State next);
+        State state = State::NoKey;
 
         AppSettings &settings;
         bool request_pending = false;
         std::shared_ptr<std::vector<ModelInfo>> catalogue;
-        QStackedWidget *model_states = nullptr;
-        QLabel *loaded_status = nullptr;
+        QLabel *status_label = nullptr;
+        QListWidget *model_list = nullptr;
         QToolButton *refresh_button = nullptr;
         QFrame *panel = nullptr;
         QStackedWidget *pages = nullptr;
         QWidget *key_page = nullptr;
         QWidget *model_page = nullptr;
         QLineEdit *key_field = nullptr;
-        QLineEdit *model_field = nullptr;
+        QLineEdit *search_field = nullptr;
 };
