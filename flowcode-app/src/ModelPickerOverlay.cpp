@@ -14,6 +14,23 @@
 #include <QLabel>
 #include <Theme.hpp>
 
+// QStackedWidget normally reserves space for its largest (even hidden) page.
+class ModelPickerPages : public QStackedWidget {
+    public:
+        explicit ModelPickerPages(QWidget *parent) : QStackedWidget(parent) {
+            connect(this, &QStackedWidget::currentChanged, this, [this]{ updateGeometry(); });
+        }
+
+        QSize sizeHint() const override {
+            return currentWidget() ? currentWidget()->sizeHint() : QStackedWidget::sizeHint();
+        }
+
+        QSize minimumSizeHint() const override {
+            return currentWidget() ? currentWidget()->minimumSizeHint()
+                                   : QStackedWidget::minimumSizeHint();
+        }
+};
+
 class ModelPickerPanel : public QFrame {
     public:
         explicit ModelPickerPanel(QWidget *parent) : QFrame(parent) {}
@@ -59,7 +76,7 @@ ModelPickerOverlay::ModelPickerOverlay(AppSettings &settings, QWidget *parent)
     panel = new ModelPickerPanel(this);
     panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 
-    pages = new QStackedWidget(panel);
+    pages = new ModelPickerPages(panel);
     key_page = createKeyPage();
     model_page = createModelPage();
     pages->addWidget(key_page);

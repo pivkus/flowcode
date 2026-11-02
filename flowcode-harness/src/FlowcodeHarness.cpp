@@ -114,7 +114,6 @@ void Harness::Impl::coordinatorWorker(std::stop_token stop){
                     auto now = std::chrono::steady_clock::now();
                     if (model_list_cache && model_list_cache->models && 
                         now < model_list_cache->expires_at && !lm.force_refresh){
-                        debug_print("Getting list from cache");
                         toUIQueue.enqueue(ListModelsRes {
                             .models = model_list_cache->models
                         });

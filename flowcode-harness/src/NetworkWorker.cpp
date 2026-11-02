@@ -191,7 +191,6 @@ std::unique_ptr<HttpRequest> NetworkWorker::createNameSessionRequest(const NameS
 }
 
 std::unique_ptr<HttpRequest> NetworkWorker::createModelsListRequest(const ListModelsReq& req) {
-    debug_print("Requested the list from network");
     auto request = std::make_unique<HttpRequest>(
         "https://openrouter.ai/api/v1/models",
         std::vector<std::string>{"Accept: application/json"},

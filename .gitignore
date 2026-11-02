@@ -73,3 +73,6 @@ Testing/
 
 # VSCode
 .vscode/
+
+# Local app-state reset helper
+/reset-app-state.sh

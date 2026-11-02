@@ -28,7 +28,8 @@ int main(int argc, char *argv[]){
     Harness harness(HarnessConfig {
             paths::sessionsDir(),
             FLOWCODE_SYSTEM_PROMPT_PATH,
-            //"google/gemma-4-26b-a4b-it:free"
+            // "xingchen-agi/xing4.0-29b-a4b:free"
+            // "google/gemma-4-26b-a4b-it:free"
             "deepseek/deepseek-v4.1-flash-1017"
     });
 
