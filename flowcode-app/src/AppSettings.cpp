@@ -27,3 +27,18 @@ void AppSettings::saveOpenrouterKey(const QString &key) {
     settings.setValue("openrouter/key", value);
     emit openrouterKeySaved(value);
 }
+
+void AppSettings::modelListReceived(ModelListPtr models){
+    model_request_pending = false;
+    model_list = std::move(models);
+    emit modelListUpdated(model_list);
+}
+
+ModelListPtr AppSettings::getModelList(bool force){
+    if (!model_request_pending && (force || !model_list) && hasOpenrouterKey()) {
+        model_request_pending = true;
+        model_list.reset();
+        emit modelsListRequested(force);
+    }
+    return model_list;
+}

@@ -14,20 +14,23 @@
 
 class AppSettings;
 
-class ModelPickerButton : public QToolButton {
+class ChatControlButton : public QToolButton {
     public:
-        explicit ModelPickerButton(QWidget *parent = nullptr);
+        explicit ChatControlButton(const QString &label, QWidget *parent = nullptr);
         QSize sizeHint() const override;
         QSize minimumSizeHint() const override;
 
     protected:
         void paintEvent(QPaintEvent *event) override;
+
+    private:
+        QString minimum_label;
 };
 
-class ModelPickerOverlay : public QWidget {
+class ChatOptionsOverlay : public QWidget {
     Q_OBJECT
     public:
-        explicit ModelPickerOverlay(AppSettings &settings, QWidget *parent = nullptr);
+        explicit ChatOptionsOverlay(AppSettings &settings, QWidget *parent = nullptr);
         void openPicker();
         void togglePicker();
     public slots:
@@ -35,7 +38,6 @@ class ModelPickerOverlay : public QWidget {
         void refreshModels(bool force);
     signals:
         void dismissed();
-        void modelsListRequested(bool force=false);
     protected:
         void mousePressEvent(QMouseEvent *event) override;
     private:
@@ -52,8 +54,6 @@ class ModelPickerOverlay : public QWidget {
         State state = State::NoKey;
 
         AppSettings &settings;
-        bool request_pending = false;
-        ModelListPtr catalogue;
         QLabel *status_label = nullptr;
         QListWidget *model_list = nullptr;
         QToolButton *refresh_button = nullptr;

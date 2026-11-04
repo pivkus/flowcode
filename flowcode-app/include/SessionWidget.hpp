@@ -31,10 +31,7 @@ class SessionWidget : public QWidget {
         void clearRetryError();
 
         ChatInterface *chat = nullptr;
-    public slots:
-        void modelListReceived(ModelListPtr models);
     signals:
-        void modelsListRequested(bool force);
         void userPromptSent(Uuid id, const QString &content, const QString &model);
     private slots:
         void submitPrompt();
@@ -44,7 +41,7 @@ class SessionWidget : public QWidget {
         AppSettings &settings;
         bool active_response = false;
 
-        ModelPickerOverlay *model_picker = nullptr;
+        ChatOptionsOverlay *options_overlay = nullptr;
 
         void setErrorBlock(ErrorBlock *block);
         void clearError();

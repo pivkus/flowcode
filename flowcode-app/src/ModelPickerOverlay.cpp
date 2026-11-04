@@ -42,23 +42,26 @@ class ModelPickerPanel : public QFrame {
         }
 };
 
-ModelPickerButton::ModelPickerButton(QWidget *parent) : QToolButton(parent){
+ChatControlButton::ChatControlButton(const QString &label, QWidget *parent)
+ : QToolButton(parent), minimum_label(label)
+{
+    setText(label);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     setCursor(Qt::PointingHandCursor);
 }
 
-QSize ModelPickerButton::sizeHint() const {
+QSize ChatControlButton::sizeHint() const {
     return {qCeil(QFontMetricsF(font()).horizontalAdvance(text())) + 2 * Sizing::horizontal_pad,
             fontMetrics().height() + 2 * Sizing::vertical_pad};
 }
 
-QSize ModelPickerButton::minimumSizeHint() const {
-    return {qCeil(QFontMetricsF(font()).horizontalAdvance(QStringLiteral("Select Model")))
+QSize ChatControlButton::minimumSizeHint() const {
+    return {qCeil(QFontMetricsF(font()).horizontalAdvance(minimum_label))
                 + 2 * Sizing::horizontal_pad,
             sizeHint().height()};
 }
 
-void ModelPickerButton::paintEvent(QPaintEvent*){
+void ChatControlButton::paintEvent(QPaintEvent*){
     QPainter painter(this);
     paintBackground(painter, rect(), isDown() ? theme.hover : theme.surface, theme.border);
     painter.setFont(font());
@@ -70,7 +73,7 @@ void ModelPickerButton::paintEvent(QPaintEvent*){
                      fontMetrics().elidedText(text(), Qt::ElideRight, text_rect.width()));
 }
 
-ModelPickerOverlay::ModelPickerOverlay(AppSettings &settings, QWidget *parent)
+ChatOptionsOverlay::ChatOptionsOverlay(AppSettings &settings, QWidget *parent)
  : QWidget(parent), settings(settings)
 {
     panel = new ModelPickerPanel(this);
@@ -99,14 +102,16 @@ ModelPickerOverlay::ModelPickerOverlay(AppSettings &settings, QWidget *parent)
         key_field->clear();
         if (isVisible()) showModelSelection();
     });
+    connect(&settings, &AppSettings::modelListUpdated,
+            this, &ChatOptionsOverlay::modelListReceived);
     setState(State::NoKey);
 
     auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     escape->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(escape, &QShortcut::activated, this, &ModelPickerOverlay::dismiss);
+    connect(escape, &QShortcut::activated, this, &ChatOptionsOverlay::dismiss);
 }
 
-QWidget *ModelPickerOverlay::createKeyPage(){
+QWidget *ChatOptionsOverlay::createKeyPage(){
     auto *page = new QWidget(pages);
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -122,11 +127,11 @@ QWidget *ModelPickerOverlay::createKeyPage(){
     layout->addWidget(key_field);
     page->setFocusProxy(key_field);
 
-    connect(key_field, &QLineEdit::returnPressed, this, &ModelPickerOverlay::submitKey);
+    connect(key_field, &QLineEdit::returnPressed, this, &ChatOptionsOverlay::submitKey);
     return page;
 }
 
-QWidget *ModelPickerOverlay::createModelPage(){
+QWidget *ChatOptionsOverlay::createModelPage(){
     auto *page = new QWidget(pages);
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -177,16 +182,16 @@ QWidget *ModelPickerOverlay::createModelPage(){
     connect(refresh_button, &QToolButton::clicked, this, [&](){refreshModels(true);});
     layout->addWidget(refresh_button, 0, Qt::AlignLeft);
 
-    connect(search_field, &QLineEdit::textChanged, this, &ModelPickerOverlay::filterModels);
-    connect(search_field, &QLineEdit::returnPressed, this, &ModelPickerOverlay::submitModel);
-    connect(model_list, &QListWidget::itemClicked, this, &ModelPickerOverlay::submitModel);
-    connect(model_list, &QListWidget::itemActivated, this, &ModelPickerOverlay::submitModel);
+    connect(search_field, &QLineEdit::textChanged, this, &ChatOptionsOverlay::filterModels);
+    connect(search_field, &QLineEdit::returnPressed, this, &ChatOptionsOverlay::submitModel);
+    connect(model_list, &QListWidget::itemClicked, this, &ChatOptionsOverlay::submitModel);
+    connect(model_list, &QListWidget::itemActivated, this, &ChatOptionsOverlay::submitModel);
 
     // Native item activation does not consistently bind Return on every platform.
     for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
         auto *select_model = new QShortcut(QKeySequence(key), model_list);
         select_model->setContext(Qt::WidgetShortcut);
-        connect(select_model, &QShortcut::activated, this, &ModelPickerOverlay::submitModel);
+        connect(select_model, &QShortcut::activated, this, &ChatOptionsOverlay::submitModel);
     }
 
     auto *next_model = new QShortcut(QKeySequence(Qt::Key_Down), search_field);
@@ -197,7 +202,7 @@ QWidget *ModelPickerOverlay::createModelPage(){
     return page;
 }
 
-void ModelPickerOverlay::togglePicker(){
+void ChatOptionsOverlay::togglePicker(){
     if (isVisible()) {
         dismiss();
     } else {
@@ -205,7 +210,7 @@ void ModelPickerOverlay::togglePicker(){
     }
 }
 
-void ModelPickerOverlay::openPicker(){
+void ChatOptionsOverlay::openPicker(){
     if (settings.hasOpenrouterKey()) {
         showModelSelection();
     } else {
@@ -217,13 +222,13 @@ void ModelPickerOverlay::openPicker(){
     pages->currentWidget()->setFocus();
 }
 
-void ModelPickerOverlay::showModelSelection(){
+void ChatOptionsOverlay::showModelSelection(){
     search_field->clear();
     refreshModels(false);
     if (isVisible()) search_field->setFocus();
 }
 
-void ModelPickerOverlay::setState(State next){
+void ChatOptionsOverlay::setState(State next){
     state = next;
     pages->setCurrentWidget(state == State::NoKey ? key_page : model_page);
     refresh_button->setEnabled(state == State::Failed || state == State::Loaded);
@@ -232,7 +237,6 @@ void ModelPickerOverlay::setState(State next){
 
     if (state != State::Loaded) {
         model_list->clear();
-        catalogue.reset();
     }
     switch (state) {
         case State::NoKey:
@@ -250,33 +254,30 @@ void ModelPickerOverlay::setState(State next){
     }
 }
 
-void ModelPickerOverlay::refreshModels(bool force){
-    if (request_pending || !settings.hasOpenrouterKey()) return;
-    request_pending = true;
+void ChatOptionsOverlay::refreshModels(bool force){
+    if (!settings.hasOpenrouterKey()) return;
     setState(State::Loading);
-    emit modelsListRequested(force);
+    if (settings.getModelList(force)) setState(State::Loaded);
 }
 
-void ModelPickerOverlay::modelListReceived(ModelListPtr models){
-    if (!request_pending) return;
-    request_pending = false;
-    catalogue = std::move(models);
-    if (!catalogue) {
-        setState(State::Failed);
-        return;
-    }
+void ChatOptionsOverlay::modelListReceived(ModelListPtr models){
+    if (!settings.hasOpenrouterKey() || state == State::NoKey) return;
+    if (!models) { setState(State::Failed); return; }
     setState(State::Loaded);
 }
 
-void ModelPickerOverlay::submitKey(){
+void ChatOptionsOverlay::submitKey(){
     settings.saveOpenrouterKey(key_field->text());
 }
 
-void ModelPickerOverlay::filterModels(){
-    if (state != State::Loaded || !catalogue) return;
+void ChatOptionsOverlay::filterModels(){
+    if (state != State::Loaded) return;
+    const auto catalogue = settings.getModelList();
+    if (!catalogue) { setState(State::Loading); return; }
 
     model_list->clear();
     const QString query = search_field->text().trimmed();
+
     QListWidgetItem *selected_item = nullptr;
     const QString selected_model = settings.selectedModel();
     for (const auto &model : *catalogue) {
@@ -305,7 +306,7 @@ void ModelPickerOverlay::filterModels(){
     status_label->setText(catalogue->empty() ? "No models available." : "No matching models.");
 }
 
-void ModelPickerOverlay::submitModel(){
+void ChatOptionsOverlay::submitModel(){
     if (state != State::Loaded || !settings.hasOpenrouterKey()) return;
     const auto *item = model_list->currentItem();
     if (!item) return;
@@ -313,12 +314,12 @@ void ModelPickerOverlay::submitModel(){
     dismiss();
 }
 
-void ModelPickerOverlay::dismiss(){
+void ChatOptionsOverlay::dismiss(){
     key_field->clear();
     hide();
     emit dismissed();
 }
 
-void ModelPickerOverlay::mousePressEvent(QMouseEvent *event){
+void ChatOptionsOverlay::mousePressEvent(QMouseEvent *event){
     if (!panel->geometry().contains(event->position().toPoint())) dismiss();
 }

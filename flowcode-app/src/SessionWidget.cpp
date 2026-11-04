@@ -1,3 +1,4 @@
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QStackedLayout>
@@ -31,35 +32,37 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
     chat_layout->setStackingMode(QStackedLayout::StackAll);
     chat_layout->addWidget(chat_area);
 
-    model_picker = new ModelPickerOverlay(settings, chat_container);
-    chat_layout->addWidget(model_picker);
-    model_picker->hide();
+    options_overlay = new ChatOptionsOverlay(settings, chat_container);
+    chat_layout->addWidget(options_overlay);
+    options_overlay->hide();
 
     auto *input_group = new QWidget(this);
     auto *input_layout = new QVBoxLayout(input_group);
     input_layout->setContentsMargins(0, 0, 0, 0);
 
-    auto *model_button = new ModelPickerButton(input_group);
-    model_button->setText(settings.selectedModel().isEmpty() ? "Select Model" : settings.selectedModel());
-    input_layout->addWidget(model_button, 0, Qt::AlignLeft);
+    auto *model_button = new ChatControlButton("Select Model", input_group);
+    if (!settings.selectedModel().isEmpty()) model_button->setText(settings.selectedModel());
+    auto *effort_button = new ChatControlButton("Select effort", input_group);
+
+    auto *controls_layout = new QHBoxLayout;
+    controls_layout->setContentsMargins(0, 0, 0, 0);
+    controls_layout->addWidget(model_button);
+    controls_layout->addWidget(effort_button);
+    controls_layout->addStretch();
+    input_layout->addLayout(controls_layout);
     input_layout->addWidget(input_field);
 
     main_layout->addWidget(chat_container, 1);
     main_layout->addWidget(input_group);
 
-    connect(model_button, &QToolButton::clicked, model_picker, &ModelPickerOverlay::togglePicker);
+    connect(model_button, &QToolButton::clicked, options_overlay, &ChatOptionsOverlay::togglePicker);
     connect(&settings, &AppSettings::selectedModelChanged, model_button, &QToolButton::setText);
-    connect(model_picker, &ModelPickerOverlay::dismissed, this, [this]{ input_field->setFocus(); });
-    connect(model_picker, &ModelPickerOverlay::modelsListRequested, this, &SessionWidget::modelsListRequested);
+    connect(options_overlay, &ChatOptionsOverlay::dismissed, this, [this]{ input_field->setFocus(); });
 
     setLayout(main_layout);
 
     connect(input_field, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
 
-}
-
-void SessionWidget::modelListReceived(ModelListPtr models){
-    model_picker->modelListReceived(std::move(models));
 }
 
 void SessionWidget::finishResponse(){
@@ -97,7 +100,7 @@ void SessionWidget::clearRetryError(){
 void SessionWidget::submitPrompt(){
     if (active_response) return;
     if (!settings.hasOpenrouterKey() || settings.selectedModel().isEmpty()) {
-        model_picker->openPicker();
+        options_overlay->openPicker();
         return;
     }
     active_response = true;
@@ -149,8 +152,6 @@ SessionWidget* SessionStack::create(Uuid id, const TurnVec& history){
     addWidget(w); // Adds it to the internal QStackedWidget list
 
     connect(w, &SessionWidget::userPromptSent, &bridge, &Bridge::userPromptSent);
-    connect(w, &SessionWidget::modelsListRequested, &bridge, &Bridge::modelsListRequested);
-    connect(&bridge, &Bridge::modelListReceived, w, &SessionWidget::modelListReceived);
     return w;
 }
 
