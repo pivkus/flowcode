@@ -2,6 +2,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 #include <flowcode/History.hpp>
@@ -11,9 +12,10 @@ struct ModelInfo {
     std::string id; // "provider/name"
     bool supports_reasoning;
     std::vector<std::string> supported_efforts; // "low", "medium", "xhigh" ...
+    bool reasoning_mandatory = false;
 };
 
-using ModelList = std::vector<ModelInfo>;
+using ModelList = std::unordered_map<std::string, ModelInfo>;
 using ModelListPtr = std::shared_ptr<const ModelList>;
 
 struct OutputTokensDelta    { Uuid sid; std::string delta; };
@@ -21,7 +23,8 @@ struct ReasoningTokensDelta { Uuid sid; std::string delta; };
 struct TurnFinished         { Uuid sid; };
 struct SessionNamed         { Uuid sid; std::string name; };
 
-struct PromptSubmission     { Uuid sid; std::string prompt; std::string model; };
+struct PromptSubmission     { Uuid sid; std::string prompt; 
+                              std::string model; std::string reasoning; };
 struct SessionCreation      { Uuid sid; };
 
 struct ListSessionsRes      { std::vector<Uuid> uuids; std::vector<std::string> names; };

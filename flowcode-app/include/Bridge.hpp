@@ -31,7 +31,8 @@ signals:
     void modelListReceived(ModelListPtr models);
 public slots:
     void setOpenrouterKey(const QString &key);
-    void userPromptSent(Uuid id, const QString &content, const QString &model);
+    void userPromptSent(Uuid id, const QString &content, const QString &model,
+                        const QString &reasoning);
     void sessionCreated(Uuid id);
 
     void sessionsListRequested();

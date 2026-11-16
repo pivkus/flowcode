@@ -65,4 +65,5 @@ class Session {
         SchemaMapPtr tool_schemas;
 
         std::string current_model;
+        std::string current_reasoning;
 };

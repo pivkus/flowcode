@@ -9,6 +9,7 @@
 #include <QStackedWidget>
 #include <QLabel>
 #include <QListWidget>
+#include <cstddef>
 #include <flowcode/Messages.hpp>
 
 
@@ -30,37 +31,50 @@ class ChatControlButton : public QToolButton {
 class ChatOptionsOverlay : public QWidget {
     Q_OBJECT
     public:
-        explicit ChatOptionsOverlay(AppSettings &settings, QWidget *parent = nullptr);
-        void openPicker();
-        void togglePicker();
+        explicit ChatOptionsOverlay(
+            AppSettings &settings, QWidget *parent = nullptr);
+        void toggleModelPicker();
+        void toggleEffortPicker();
+    signals:
+        void dismissed();
+        void modelsListRequested(bool force = false);
+    protected:
+        void mousePressEvent(QMouseEvent *event) override;
     public slots:
         void modelListReceived(ModelListPtr models);
         void refreshModels(bool force);
-    signals:
-        void dismissed();
-    protected:
-        void mousePressEvent(QMouseEvent *event) override;
     private:
-        void dismiss();
-        QWidget *createKeyPage();
-        QWidget *createModelPage();
-        void showModelSelection();
-        void submitKey();
-        void submitModel();
-        void filterModels();
-
-        enum class State { NoKey, Loading, Failed, Loaded };
-        void setState(State next);
-        State state = State::NoKey;
-
         AppSettings &settings;
-        QLabel *status_label = nullptr;
-        QListWidget *model_list = nullptr;
-        QToolButton *refresh_button = nullptr;
-        QFrame *panel = nullptr;
+        ModelListPtr catalogue = nullptr;
+        bool catalogue_pending = true;
+        
+        enum class Target { Model, Effort };
+        enum Page { Key, Loading, Failed, Model, Effort };
+
+        void open(Target target);
+        void dismiss();
+        void resolvePage();
+        void setPage(Page page);
+
+        void submitKey(const QString& key);
+        void submitModel(const QString& id);
+        void submitEffort(const QString& effort);
+        void refreshModels();
+        void filterModels(const QString& query);
+
+        QWidget *createKeyPage();
+        QWidget *createLoadingPage();
+        QWidget *createFailedPage();
+        QWidget *createModelPage();
+        QWidget *createEffortPage();
+        
+        Target target = Target::Model;
+        Page page = Page::Key;
+
         QStackedWidget *pages = nullptr;
-        QWidget *key_page = nullptr;
-        QWidget *model_page = nullptr;
-        QLineEdit *key_field = nullptr;
+        QFrame *panel = nullptr;
+        QListWidget *model_list = nullptr;
         QLineEdit *search_field = nullptr;
+        // QListWidget *model_list = nullptr;
+        // QLabel *model_status = nullptr;
 };

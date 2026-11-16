@@ -3,11 +3,15 @@
 AppSettings::AppSettings(QObject *parent) : QObject(parent) {}
 
 QString AppSettings::selectedModel() const {
-    return settings.value("model/selected").toString().trimmed();
+    return settings.value("model/selected").toString();
 }
 
 QString AppSettings::openrouterKey() const {
-    return settings.value("openrouter/key").toString().trimmed();
+    return settings.value("openrouter/key").toString();
+}
+
+QString AppSettings::selectedEffort() const {
+    return settings.value("model/effort").toString();
 }
 
 bool AppSettings::hasOpenrouterKey() const {
@@ -28,17 +32,9 @@ void AppSettings::saveOpenrouterKey(const QString &key) {
     emit openrouterKeySaved(value);
 }
 
-void AppSettings::modelListReceived(ModelListPtr models){
-    model_request_pending = false;
-    model_list = std::move(models);
-    emit modelListUpdated(model_list);
-}
-
-ModelListPtr AppSettings::getModelList(bool force){
-    if (!model_request_pending && (force || !model_list) && hasOpenrouterKey()) {
-        model_request_pending = true;
-        model_list.reset();
-        emit modelsListRequested(force);
-    }
-    return model_list;
+void AppSettings::selectEffort(const QString &effort){
+    if (selectedModel().isEmpty()) return;
+    const QString value = effort.trimmed();
+    settings.setValue("model/effort", value);
+    emit selectedEffortChanged(value);
 }

@@ -1,4 +1,3 @@
-#include "AppSettings.hpp"
 #include <QHBoxLayout>
 
 #include <MainWindow.hpp>
@@ -35,13 +34,8 @@ MainWindow::MainWindow(Bridge& bridge, AppSettings &settings, QWidget *parent)
     connect(&bridge, &Bridge::sessionListReceived, this, &MainWindow::newSession,
             Qt::SingleShotConnection);
 
-    connect(&bridge, &Bridge::modelListReceived,
-            &settings, &AppSettings::modelListReceived);
-    connect(&settings, &AppSettings::modelsListRequested,
-            &bridge, &Bridge::modelsListRequested);
-
-    // Warm the shared model cache before the picker is opened.
-    settings.getModelList();
+    // Warm the harness model cache before the picker is opened.
+    bridge.modelsListRequested(false);
 }
 
 void MainWindow::newSession()

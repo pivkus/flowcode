@@ -133,7 +133,16 @@ std::string buildChatPayload(const SendRequest& request){
     json_payload["model"] = request.model;
     json_payload["stream"] = true;
     json_payload["messages"] = serializeTurns(*request.snapshot);
-    json_payload["reasoning"] = { {"enabled", true} };
+    if (request.reasoning == "off"){
+        // "off" is an internal value, not an effort level.
+        json_payload["reasoning"] = {{"enabled", false}};
+    } else if (request.reasoning == "on"){
+        // "on" is an internal value used when no reasoning efforts exist
+        json_payload["reasoning"] = {{"enabled", true}};
+    } else if (!request.reasoning.empty()) {
+        json_payload["reasoning"] = {{"effort", request.reasoning}};
+    }
+
 
     if (request.tools && !request.tools->empty()){
         json_payload["tools"] = json::array();
@@ -533,9 +542,17 @@ void ModelsListHandler::onComplete(){
             auto *reasoning = jObject(entry, "reasoning");
             if (reasoning) {
                 model.supports_reasoning = true;
+                model.reasoning_mandatory = reasoning->value("mandatory", false);
                 const auto efforts = reasoning->find("supported_efforts");
-                if (efforts != reasoning->end() && !efforts->is_null()) {
-                    model.supported_efforts = efforts->get<std::vector<std::string>>();
+                if (efforts != reasoning->end()) {
+                    if (efforts->is_null()) {
+                        // Null accepts all openrouter normalized efforts
+                        model.supported_efforts = {
+                            "max", "xhigh", "high", "medium", "low", "minimal", "none"
+                        };
+                    } else {
+                        model.supported_efforts = efforts->get<std::vector<std::string>>();
+                    }
                 }
             } else {
                 auto *parameters = jArray(entry, "supported_parameters");
@@ -548,7 +565,8 @@ void ModelsListHandler::onComplete(){
                     }
                 }
             }
-            models->push_back(std::move(model));
+            const auto id = model.id;
+            models->insert_or_assign(id, std::move(model));
         }
         out.enqueue(ListModelsRes{ .models = std::move(models) });
     } catch (const std::exception& e) {

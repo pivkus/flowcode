@@ -21,7 +21,7 @@ template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 class SessionWidget : public QWidget {
     Q_OBJECT
     public:
-        SessionWidget(Uuid id, AppSettings &settings, QWidget *parent = nullptr);
+        SessionWidget(Uuid id, AppSettings &settings, Bridge &bridge, QWidget *parent = nullptr);
 
         void renderSession(const TurnVec& history);
 
@@ -32,7 +32,8 @@ class SessionWidget : public QWidget {
 
         ChatInterface *chat = nullptr;
     signals:
-        void userPromptSent(Uuid id, const QString &content, const QString &model);
+        void userPromptSent(Uuid id, const QString &content, const QString &model,
+                            const QString &reasoning);
     private slots:
         void submitPrompt();
 

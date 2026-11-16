@@ -13,7 +13,7 @@
 #include <ModelPickerOverlay.hpp>
 #include <Bridge.hpp>
 
-SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
+SessionWidget::SessionWidget(Uuid id, AppSettings &settings, Bridge &bridge, QWidget *parent)
  : QWidget(parent), id(id), settings(settings)
 {
     main_layout = new QVBoxLayout(this);
@@ -41,8 +41,17 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
     input_layout->setContentsMargins(0, 0, 0, 0);
 
     auto *model_button = new ChatControlButton("Select Model", input_group);
-    if (!settings.selectedModel().isEmpty()) model_button->setText(settings.selectedModel());
     auto *effort_button = new ChatControlButton("Select effort", input_group);
+    if (!settings.selectedModel().isEmpty()) 
+        model_button->setText(settings.selectedModel());
+    const auto updateEffortLabel = [effort_button](const QString &effort) {
+        effort_button->setText(
+            effort.isEmpty() ? QStringLiteral("Select effort") :
+            effort == "off" ? QStringLiteral("Reasoning off") :
+            effort == "on" ? QStringLiteral("Reasoning on") : effort);
+    };
+    updateEffortLabel(settings.selectedEffort());
+    
 
     auto *controls_layout = new QHBoxLayout;
     controls_layout->setContentsMargins(0, 0, 0, 0);
@@ -55,10 +64,23 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, QWidget *parent)
     main_layout->addWidget(chat_container, 1);
     main_layout->addWidget(input_group);
 
-    connect(model_button, &QToolButton::clicked, options_overlay, &ChatOptionsOverlay::togglePicker);
-    connect(&settings, &AppSettings::selectedModelChanged, model_button, &QToolButton::setText);
-    connect(options_overlay, &ChatOptionsOverlay::dismissed, this, [this]{ input_field->setFocus(); });
+    connect(model_button, &QToolButton::clicked, 
+            options_overlay, &ChatOptionsOverlay::toggleModelPicker);
+    connect(effort_button, &QToolButton::clicked,
+            options_overlay, &ChatOptionsOverlay::toggleEffortPicker);
+    connect(options_overlay, &ChatOptionsOverlay::dismissed, 
+            this, [this]{ input_field->setFocus(); });
+    connect(options_overlay, &ChatOptionsOverlay::modelsListRequested,
+            &bridge, &Bridge::modelsListRequested);
+    connect(&bridge, &Bridge::modelListReceived,
+            options_overlay, &ChatOptionsOverlay::modelListReceived);
 
+    emit options_overlay->modelsListRequested();
+
+    connect(&settings, &AppSettings::selectedModelChanged,
+            model_button, &QToolButton::setText);
+    connect(&settings, &AppSettings::selectedEffortChanged, 
+            effort_button, updateEffortLabel);
     setLayout(main_layout);
 
     connect(input_field, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
@@ -99,8 +121,9 @@ void SessionWidget::clearRetryError(){
 
 void SessionWidget::submitPrompt(){
     if (active_response) return;
-    if (!settings.hasOpenrouterKey() || settings.selectedModel().isEmpty()) {
-        options_overlay->openPicker();
+    if (!settings.hasOpenrouterKey() ||
+        settings.selectedModel().isEmpty()) {
+        // options_overlay->openPicker();
         return;
     }
     active_response = true;
@@ -109,7 +132,7 @@ void SessionWidget::submitPrompt(){
     const QString prompt = input_field->text();
     chat->appendPrompt(prompt);
 
-    emit userPromptSent(id, prompt, settings.selectedModel());
+    emit userPromptSent(id, prompt, settings.selectedModel(), settings.selectedEffort());
     input_field->clear();
 }
 
@@ -146,7 +169,7 @@ SessionStack::SessionStack(Bridge& bridge, AppSettings &settings, QWidget *paren
 }
 
 SessionWidget* SessionStack::create(Uuid id, const TurnVec& history){
-    SessionWidget *w = new SessionWidget(id, settings);
+    SessionWidget *w = new SessionWidget(id, settings, bridge);
     sessions.insert(id, w);
 
     addWidget(w); // Adds it to the internal QStackedWidget list

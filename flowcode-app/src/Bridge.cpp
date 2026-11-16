@@ -23,12 +23,14 @@ Bridge::~Bridge(){
     harness.setMessageCallback(nullptr);
 }
 
-void Bridge::userPromptSent(Uuid id, const QString &content, const QString &model)
+void Bridge::userPromptSent(Uuid id, const QString &content, const QString &model,
+                           const QString &reasoning)
 {
     harness.pushMessage(PromptSubmission {
         .sid = id,
         .prompt = content.toStdString(),
-        .model = model.toStdString()
+        .model = model.toStdString(),
+        .reasoning = reasoning.toStdString()
     });
 }
 

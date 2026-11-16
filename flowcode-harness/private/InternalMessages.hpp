@@ -9,7 +9,8 @@ struct ScheduleRetry        { Uuid sid; std::chrono::steady_clock::time_point de
 struct NameSessionReq       { Uuid sid; std::shared_ptr<TurnVec> snapshot; };
 
 struct SendRequest          { Uuid sid; std::shared_ptr<TurnVec> snapshot;
-                              SchemaMapPtr tools; std::string model; };
+                              SchemaMapPtr tools; std::string model; 
+                              std::string reasoning; };
 // Tools
 struct ToolCallsMade        { Uuid sid; ToolCallRequests calls; };
 struct ToolExecute          { Uuid sid; uint64_t tid; ResolvedCall call; };

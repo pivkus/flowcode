@@ -28,6 +28,7 @@ void Session::setIdleState(){
     state = Idle{};
     retries_used = 0;
     current_model = "";
+    current_reasoning.clear();
 }
 
 std::shared_ptr<TurnVec> Session::snapshotHistory() const {
@@ -58,13 +59,15 @@ Effects Session::submitUserTurn(PromptSubmission ps) {
 
     state = AwaitingModel{};
     current_model = std::move(ps.model);
+    current_reasoning = std::move(ps.reasoning);
 
     auto snapshot = snapshotHistory();
     Effects effects = { SendRequest{
         .sid = session_id,
         .snapshot = snapshot,
         .tools = tool_schemas,
-        .model = current_model
+        .model = current_model,
+        .reasoning = current_reasoning
     } };
 
     if (first_user_message) {
@@ -157,7 +160,8 @@ Effects Session::onRetryDue(){
         .sid = session_id, 
         .snapshot = snapshotHistory(), 
         .tools = tool_schemas,
-        .model = current_model
+        .model = current_model,
+        .reasoning = current_reasoning
     } };
 }
 
@@ -252,7 +256,8 @@ void Session::finishToolCalls(Effects& effects){
         .sid = session_id,
         .snapshot = snapshotHistory(),
         .tools = tool_schemas,
-        .model = current_model
+        .model = current_model,
+        .reasoning = current_reasoning
     });
 
     state = AwaitingModel{};

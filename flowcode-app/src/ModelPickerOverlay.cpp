@@ -18,7 +18,16 @@
 class ModelPickerPages : public QStackedWidget {
     public:
         explicit ModelPickerPages(QWidget *parent) : QStackedWidget(parent) {
-            connect(this, &QStackedWidget::currentChanged, this, [this]{ updateGeometry(); });
+            layout()->setSizeConstraint(QLayout::SetNoConstraint);
+            connect(this, &QStackedWidget::currentChanged, this, [this]{
+                // Set QSizePolicy::Ignored for inactiv pages
+                for (int i = 0; i < count(); ++i) {
+                    const auto policy = i == currentIndex()
+                        ? QSizePolicy::Preferred : QSizePolicy::Ignored;
+                    widget(i)->setSizePolicy(policy, policy);
+                }
+                updateGeometry();
+            });
         }
 
         QSize sizeHint() const override {
@@ -29,11 +38,14 @@ class ModelPickerPages : public QStackedWidget {
             return currentWidget() ? currentWidget()->minimumSizeHint()
                                    : QStackedWidget::minimumSizeHint();
         }
+
 };
 
 class ModelPickerPanel : public QFrame {
     public:
-        explicit ModelPickerPanel(QWidget *parent) : QFrame(parent) {}
+        explicit ModelPickerPanel(QWidget *parent) : QFrame(parent) {
+            setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        }
 
     protected:
         void paintEvent(QPaintEvent*) override {
@@ -73,72 +85,169 @@ void ChatControlButton::paintEvent(QPaintEvent*){
                      fontMetrics().elidedText(text(), Qt::ElideRight, text_rect.width()));
 }
 
+
 ChatOptionsOverlay::ChatOptionsOverlay(AppSettings &settings, QWidget *parent)
- : QWidget(parent), settings(settings)
+    : settings(settings), QWidget(parent)
 {
     panel = new ModelPickerPanel(this);
-    panel->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-
     pages = new ModelPickerPages(panel);
-    key_page = createKeyPage();
-    model_page = createModelPage();
-    pages->addWidget(key_page);
-    pages->addWidget(model_page);
 
     auto *panel_layout = new QVBoxLayout(panel);
-    panel_layout->setContentsMargins(Sizing::horizontal_pad, Sizing::vertical_pad,
-                                     Sizing::horizontal_pad, Sizing::vertical_pad);
     panel_layout->addWidget(pages);
 
-    auto *row = new QHBoxLayout;
-    row->addWidget(panel, 2);
-    row->addStretch(1);
+    auto *overlay_layout = new QVBoxLayout(this);
+    overlay_layout->addWidget(panel, 0, Qt::AlignBottom | Qt::AlignLeft);
 
-    auto *layout = new QVBoxLayout(this);
-    layout->addStretch();
-    layout->addLayout(row);
-
-    connect(&settings, &AppSettings::openrouterKeySaved, this, [this]{
-        key_field->clear();
-        if (isVisible()) showModelSelection();
-    });
-    connect(&settings, &AppSettings::modelListUpdated,
-            this, &ChatOptionsOverlay::modelListReceived);
-    setState(State::NoKey);
+    pages->addWidget(createKeyPage());
+    pages->addWidget(createLoadingPage());
+    pages->addWidget(createFailedPage());
+    pages->addWidget(createModelPage());
+    pages->addWidget(createEffortPage());
 
     auto *escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     escape->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(escape, &QShortcut::activated, this, &ChatOptionsOverlay::dismiss);
+    connect(escape, &QShortcut::activated,
+            this, &ChatOptionsOverlay::dismiss);
+
+    catalogue_pending = true;
 }
 
-QWidget *ChatOptionsOverlay::createKeyPage(){
+void ChatOptionsOverlay::mousePressEvent(QMouseEvent *event){
+    if (!panel->geometry().contains(event->position().toPoint())) dismiss();
+}
+
+void ChatOptionsOverlay::toggleModelPicker(){
+    if (!isVisible() || target != Target::Model) open(Target::Model);
+    else dismiss();
+}
+void ChatOptionsOverlay::toggleEffortPicker(){
+    if (!isVisible() || target != Target::Effort) open(Target::Effort);
+    else dismiss();
+}
+// Set requested target, finds appropriate page, shows it
+void ChatOptionsOverlay::open(Target requested){
+    target = requested;
+    resolvePage();
+    if (page == Page::Model) filterModels(search_field->text());
+
+    show();
+    raise();
+    pages->currentWidget()->setFocus(Qt::OtherFocusReason);
+}
+void ChatOptionsOverlay::setPage(Page next){
+    page = next;
+    pages->setCurrentWidget(pages->widget(page));
+    if (isVisible()) pages->currentWidget()->setFocus(Qt::OtherFocusReason);
+}
+void ChatOptionsOverlay::resolvePage(){
+    if (!settings.hasOpenrouterKey()) setPage(Page::Key);
+    else if (catalogue_pending) setPage(Page::Loading);
+    else if (!catalogue) setPage(Page::Failed);
+    else if (target == Target::Model) setPage(Page::Model);
+    else if (settings.selectedModel().isEmpty()) setPage(Page::Model);
+    else setPage(Page::Effort);
+}
+void ChatOptionsOverlay::modelListReceived(ModelListPtr models){
+    catalogue = std::move(models);
+    catalogue_pending = false;
+    resolvePage();
+}
+void ChatOptionsOverlay::refreshModels(bool force){
+    emit modelsListRequested(force);
+    catalogue_pending = true;
+    resolvePage();
+}
+void ChatOptionsOverlay::submitKey(const QString& key){
+    settings.saveOpenrouterKey(key);
+    resolvePage();
+}
+void ChatOptionsOverlay::submitModel(const QString& id){
+    if (!settings.hasOpenrouterKey()) return;
+    // Look up model info from catalogue
+    auto it = catalogue->find(id.toStdString());
+    if (it == catalogue->end()) return;
+    const ModelInfo& model = it->second;
+
+    bool changed = id != settings.selectedModel();
+
+    // Select a sensible default for reasoning effort so
+    // that it is not uninitialized
+    std::string reasoning;
+
+    if (!model.supports_reasoning) reasoning = "off";
+    else if (!model.supported_efforts.empty()) 
+        reasoning = model.supported_efforts.front();
+    else reasoning = "on";
+
+
+
+    settings.selectModel(id);
+    if (changed) settings.selectEffort(QString::fromStdString(reasoning));
+    
+    if (target == Target::Model) dismiss();
+    else resolvePage();
+}
+void ChatOptionsOverlay::submitEffort(const QString& effort){
+    settings.selectEffort(effort);
+    dismiss();
+}
+void ChatOptionsOverlay::dismiss(){
+    hide();
+    emit dismissed();
+}
+
+QWidget* ChatOptionsOverlay::createKeyPage(){
     auto *page = new QWidget(pages);
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(new QLabel("Connect your Openrouter key", page));
-
-    key_field = new QLineEdit(page);
-    key_field->setFrame(false);
-    key_field->setStyleSheet(QStringLiteral("QLineEdit { background: %1; }")
+    layout->addWidget(new QLabel("Connect your OpenRouter key", page));
+ 
+    auto *field = new QLineEdit(page);
+    field->setFrame(false);
+    field->setStyleSheet(QStringLiteral("QLineEdit { background: %1; }")
         .arg(theme.background.name()));
-    key_field->setEchoMode(QLineEdit::Password);
-    key_field->setPlaceholderText("Openrouter API key");
-    key_field->setAccessibleName("Openrouter API key");
-    layout->addWidget(key_field);
-    page->setFocusProxy(key_field);
-
-    connect(key_field, &QLineEdit::returnPressed, this, &ChatOptionsOverlay::submitKey);
+    field->setEchoMode(QLineEdit::Password);
+    field->setPlaceholderText("OpenRouter API key");
+    field->setAccessibleName("OpenRouter API key");
+    layout->addWidget(field);
+    page->setFocusProxy(field);
+    connect(field, &QLineEdit::returnPressed, this, [this, field]{
+        submitKey(field->text());
+    });
+    connect(&settings, &AppSettings::openrouterKeySaved, field, &QLineEdit::clear);
+    connect(this, &ChatOptionsOverlay::dismissed, field, &QLineEdit::clear);
     return page;
 }
 
-QWidget *ChatOptionsOverlay::createModelPage(){
+QWidget* ChatOptionsOverlay::createLoadingPage(){
+    auto *page = new QWidget(pages);
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(new QLabel("Loading models…", page));
+    return page;
+}
+
+QWidget* ChatOptionsOverlay::createFailedPage(){
+    auto *page = new QWidget(pages);
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto *message = new QLabel("Failed to load models. Try refreshing.", page);
+    message->setWordWrap(true);
+    layout->addWidget(message);
+    auto *refresh = new ChatControlButton("Refresh", page);
+    layout->addWidget(refresh, 0, Qt::AlignLeft);
+    page->setFocusProxy(refresh);
+    connect(refresh, &QToolButton::clicked, this, [this]{ refreshModels(true); });
+    return page;
+}
+
+QWidget* ChatOptionsOverlay::createModelPage(){
     auto *page = new QWidget(pages);
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(new QLabel("Select a model", page));
 
     search_field = new QLineEdit(page);
-    search_field->setFrame(false);
     search_field->setStyleSheet(QStringLiteral("QLineEdit { background: %1; }")
         .arg(theme.background.name()));
     search_field->setPlaceholderText("Search models…");
@@ -147,18 +256,12 @@ QWidget *ChatOptionsOverlay::createModelPage(){
     layout->addWidget(search_field);
     page->setFocusProxy(search_field);
 
-    status_label = new QLabel(page);
-    status_label->setWordWrap(true);
-    layout->addWidget(status_label);
-
     model_list = new QListWidget(page);
     model_list->setAccessibleName("Matching models");
     model_list->setFrameShape(QFrame::NoFrame);
-    model_list->setMinimumHeight(160);
-    model_list->setMaximumHeight(240);
+
     model_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     model_list->setTextElideMode(Qt::ElideRight);
-    model_list->setFont(page->font());
     model_list->setStyleSheet(QStringLiteral(
         "QListWidget { background: %1; color: %2; outline: none; }"
         "QListWidget::item { padding: %3px %4px; border-radius: %6px; }"
@@ -168,132 +271,157 @@ QWidget *ChatOptionsOverlay::createModelPage(){
         .arg(theme.hover.name()).arg(Sizing::corner_radius));
     layout->addWidget(model_list);
 
-    refresh_button = new QToolButton(page);
-    refresh_button->setText("Refresh");
-    refresh_button->setCursor(Qt::PointingHandCursor);
-    refresh_button->setStyleSheet(QStringLiteral(
-        "QToolButton { background: %1; color: %2; border: 1px solid %3;"
-        " border-radius: %4px; padding: %5px %6px; }"
-        "QToolButton:hover, QToolButton:pressed { background: %7; }"
-        "QToolButton:disabled { color: %8; }")
-        .arg(theme.surface.name(), theme.text.name(), theme.border.name())
-        .arg(Sizing::corner_radius).arg(Sizing::vertical_pad).arg(Sizing::horizontal_pad)
-        .arg(theme.hover.name(), theme.text_muted.name()));
-    connect(refresh_button, &QToolButton::clicked, this, [&](){refreshModels(true);});
-    layout->addWidget(refresh_button, 0, Qt::AlignLeft);
-
+    auto *refresh = new ChatControlButton("Refresh", page);
+    layout->addWidget(refresh, 0, Qt::AlignLeft);
+    connect(refresh, &QToolButton::clicked, this, [this]{ refreshModels(true); });
     connect(search_field, &QLineEdit::textChanged, this, &ChatOptionsOverlay::filterModels);
-    connect(search_field, &QLineEdit::returnPressed, this, &ChatOptionsOverlay::submitModel);
-    connect(model_list, &QListWidget::itemClicked, this, &ChatOptionsOverlay::submitModel);
-    connect(model_list, &QListWidget::itemActivated, this, &ChatOptionsOverlay::submitModel);
-
-    // Native item activation does not consistently bind Return on every platform.
-    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
-        auto *select_model = new QShortcut(QKeySequence(key), model_list);
-        select_model->setContext(Qt::WidgetShortcut);
-        connect(select_model, &QShortcut::activated, this, &ChatOptionsOverlay::submitModel);
-    }
-
-    auto *next_model = new QShortcut(QKeySequence(Qt::Key_Down), search_field);
-    next_model->setContext(Qt::WidgetShortcut);
-    connect(next_model, &QShortcut::activated, this, [this]{
-        if (state == State::Loaded && model_list->currentItem()) model_list->setFocus();
+    connect(this, &ChatOptionsOverlay::dismissed, search_field, &QLineEdit::clear);
+    connect(pages, &QStackedWidget::currentChanged, page, 
+        [this, page]{
+            if (pages->currentWidget() == page) {
+                filterModels(search_field->text());
+            }
     });
+    connect(&settings, &AppSettings::selectedModelChanged,
+            page, [this]{ filterModels(search_field->text()); });
+
+    const auto select = [this]{
+        const auto *item = model_list->currentItem();
+        if (item) submitModel(item->data(Qt::UserRole).toString());
+    };
+    connect(search_field, &QLineEdit::returnPressed, this, select);
+    connect(model_list, &QListWidget::itemClicked, this, select);
+    connect(model_list, &QListWidget::itemActivated, this, select);
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto *shortcut = new QShortcut(QKeySequence(key), model_list);
+        shortcut->setContext(Qt::WidgetShortcut);
+        connect(shortcut, &QShortcut::activated, this, select);
+    }
+    auto *down = new QShortcut(QKeySequence(Qt::Key_Down), search_field);
+    down->setContext(Qt::WidgetShortcut);
+    connect(down, &QShortcut::activated, this, [this]{
+        if (model_list->currentItem()) model_list->setFocus(Qt::ShortcutFocusReason);
+    });
+    filterModels(search_field->text());
     return page;
 }
 
-void ChatOptionsOverlay::togglePicker(){
-    if (isVisible()) {
-        dismiss();
-    } else {
-        openPicker();
+QWidget* ChatOptionsOverlay::createEffortPage(){
+    auto *page = new QWidget(pages);
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(new QLabel("Select reasoning effort", page));
+
+    // Displays the (lack of) reasoning capabilities of selected model
+    auto *status = new QLabel(page);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+
+    auto *efforts = new QListWidget(page);
+    efforts->setAccessibleName("Reasoning effort levels");
+    efforts->setFrameShape(QFrame::NoFrame);
+    efforts->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    efforts->setTextElideMode(Qt::ElideRight);
+    efforts->setStyleSheet(QStringLiteral(
+        "QListWidget { background: %1; color: %2; outline: none; }"
+        "QListWidget::item { padding: %3px %4px; border-radius: %6px; }"
+        "QListWidget::item:selected { background: %5; color: %2; }")
+        .arg(theme.background.name(), theme.text.name())
+        .arg(Sizing::vertical_pad).arg(Sizing::horizontal_pad)
+        .arg(theme.hover.name()).arg(Sizing::corner_radius));
+    layout->addWidget(efforts);
+    page->setFocusProxy(efforts);
+
+    auto renderEfforts = [this, efforts, status](){
+        Q_ASSERT(catalogue);
+        efforts->clear();
+        // Note: here I am also assuming catalogue is loaded
+        // and the model is indeed selected, the widget state should
+        // guarantee it, maybe assert
+        auto model = catalogue->find(settings.selectedModel().toStdString());
+        // Note: if the selected model not in catalogue (is it stale), the widget
+        // should force a change of model i think (or react differently that giving up)
+        if (model == catalogue->end()){
+            status->setText("Reasoning information not available");
+        } else if (!model->second.supports_reasoning){
+            status->setText("This model does not support reasoning");
+        } else if (model->second.supported_efforts.empty()){
+            auto *on = new QListWidgetItem("On", efforts);
+            on->setData(Qt::UserRole, QStringLiteral("on"));
+            efforts->setCurrentItem(on);
+            if (!model->second.reasoning_mandatory) {
+                // Some models might not allow reasoning off
+                auto *off = new QListWidgetItem("Off", efforts);
+                off->setData(Qt::UserRole, QStringLiteral("off"));
+                if (settings.selectedEffort() == "off") efforts->setCurrentItem(off);
+            }
+        } else {
+            for (const auto &effort : model->second.supported_efforts) {
+                const auto value = QString::fromStdString(effort);
+                auto *item = new QListWidgetItem(value, efforts);
+                item->setData(Qt::UserRole, value);
+                if (value == settings.selectedEffort()) efforts->setCurrentItem(item);
+            } 
+        }
+
+        status->setVisible(efforts->count() == 0);
+        efforts->setVisible(efforts->count() > 0);
+
+        if (efforts->count() > 0) {
+            efforts->setFixedHeight(qMin(240, efforts->sizeHintForRow(0) * efforts->count()));
+        }
+        // Based on the visibility of status/efforts, the sizing might be different
+        pages->updateGeometry();
+    };
+
+    // resolvePage guarantees that the page won't be made visible unless it has
+    // all the data it needs (catalogue)  
+    auto renderIfVisible = [this, page, renderEfforts]{
+        if (pages->currentWidget() == page) renderEfforts();
+    };
+
+    connect(pages, &QStackedWidget::currentChanged, page, renderIfVisible);
+    // Note: Do we need to render every time here? what if page is not efforts
+    connect(&settings, &AppSettings::selectedModelChanged, page, renderIfVisible);
+    connect(&settings, &AppSettings::selectedEffortChanged, page, renderIfVisible);
+
+    const auto select = [this, efforts]{
+        const auto *item = efforts->currentItem();
+        if (item) submitEffort(item->data(Qt::UserRole).toString());
+    };
+    connect(efforts, &QListWidget::itemClicked, this, select);
+    connect(efforts, &QListWidget::itemActivated, this, select);
+    for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
+        auto *shortcut = new QShortcut(QKeySequence(key), efforts);
+        shortcut->setContext(Qt::WidgetShortcut);
+        connect(shortcut, &QShortcut::activated, this, select);
     }
+    // No effort list rendering at construction.
+    return page;
 }
 
-void ChatOptionsOverlay::openPicker(){
-    if (settings.hasOpenrouterKey()) {
-        showModelSelection();
-    } else {
-        key_field->clear();
-        setState(State::NoKey);
-    }
-    show();
-    raise();
-    pages->currentWidget()->setFocus();
-}
-
-void ChatOptionsOverlay::showModelSelection(){
-    search_field->clear();
-    refreshModels(false);
-    if (isVisible()) search_field->setFocus();
-}
-
-void ChatOptionsOverlay::setState(State next){
-    state = next;
-    pages->setCurrentWidget(state == State::NoKey ? key_page : model_page);
-    refresh_button->setEnabled(state == State::Failed || state == State::Loaded);
-    model_list->setVisible(state == State::Loaded);
-    status_label->setVisible(state != State::NoKey);
-
-    if (state != State::Loaded) {
-        model_list->clear();
-    }
-    switch (state) {
-        case State::NoKey:
-            status_label->clear();
-            break;
-        case State::Loading:
-            status_label->setText("Loading models…");
-            break;
-        case State::Failed:
-            status_label->setText("Failed to load models. Try refreshing.");
-            break;
-        case State::Loaded:
-            filterModels();
-            break;
-    }
-}
-
-void ChatOptionsOverlay::refreshModels(bool force){
-    if (!settings.hasOpenrouterKey()) return;
-    setState(State::Loading);
-    if (settings.getModelList(force)) setState(State::Loaded);
-}
-
-void ChatOptionsOverlay::modelListReceived(ModelListPtr models){
-    if (!settings.hasOpenrouterKey() || state == State::NoKey) return;
-    if (!models) { setState(State::Failed); return; }
-    setState(State::Loaded);
-}
-
-void ChatOptionsOverlay::submitKey(){
-    settings.saveOpenrouterKey(key_field->text());
-}
-
-void ChatOptionsOverlay::filterModels(){
-    if (state != State::Loaded) return;
-    const auto catalogue = settings.getModelList();
-    if (!catalogue) { setState(State::Loading); return; }
-
+void ChatOptionsOverlay::filterModels(const QString& query){
     model_list->clear();
-    const QString query = search_field->text().trimmed();
 
     QListWidgetItem *selected_item = nullptr;
-    const QString selected_model = settings.selectedModel();
-    for (const auto &model : *catalogue) {
-        const QString id = QString::fromStdString(model.id);
-        if (!id.contains(query, Qt::CaseInsensitive)) continue;
-        QString label = id;
-        const auto separator = id.indexOf('/');
-        if (separator > 0) {
-            QString provider = id.left(separator);
-            provider[0] = provider[0].toUpper();
-            label = provider + QStringLiteral("   ") + id.mid(separator + 1);
+    if (catalogue) {
+        for (const auto &[model_id, model] : *catalogue) {
+            const QString id = QString::fromStdString(model_id);
+            if (!id.contains(query, Qt::CaseInsensitive)) continue;
+    
+            QString label = id;
+            const auto separator = id.indexOf('/');
+            if (separator > 0) {
+                QString provider = id.left(separator);
+                provider[0] = provider[0].toUpper();
+                label = provider + QStringLiteral("   ") + id.mid(separator + 1);
+            }
+            auto *item = new QListWidgetItem(label, model_list);
+            item->setData(Qt::UserRole, id);
+            item->setToolTip(id);
+            if (id == settings.selectedModel()) selected_item = item;
         }
-        auto *item = new QListWidgetItem(label, model_list);
-        item->setData(Qt::UserRole, id);
-        item->setToolTip(id);
-        if (id == selected_model) selected_item = item;
+    
     }
     model_list->sortItems();
     if (selected_item) {
@@ -302,24 +430,4 @@ void ChatOptionsOverlay::filterModels(){
     } else if (model_list->count() > 0) {
         model_list->setCurrentRow(0);
     }
-    status_label->setVisible(model_list->count() == 0);
-    status_label->setText(catalogue->empty() ? "No models available." : "No matching models.");
-}
-
-void ChatOptionsOverlay::submitModel(){
-    if (state != State::Loaded || !settings.hasOpenrouterKey()) return;
-    const auto *item = model_list->currentItem();
-    if (!item) return;
-    settings.selectModel(item->data(Qt::UserRole).toString());
-    dismiss();
-}
-
-void ChatOptionsOverlay::dismiss(){
-    key_field->clear();
-    hide();
-    emit dismissed();
-}
-
-void ChatOptionsOverlay::mousePressEvent(QMouseEvent *event){
-    if (!panel->geometry().contains(event->position().toPoint())) dismiss();
 }
