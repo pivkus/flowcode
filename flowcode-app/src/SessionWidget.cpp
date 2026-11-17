@@ -5,6 +5,10 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QString>
+#include <QTextDocument>
+#include <QTextBlock>
+#include <QAbstractTextDocumentLayout>
+#include <QtMath>
 #include <string>
 #include <variant>
 
@@ -18,7 +22,7 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, Bridge &bridge, QWi
 {
     main_layout = new QVBoxLayout(this);
 
-    input_field = new QLineEdit(this);
+    input_field = new ChatInputField(this);
     chat = new ChatInterface(this);
 
     chat_area = new QScrollArea(this);
@@ -83,7 +87,7 @@ SessionWidget::SessionWidget(Uuid id, AppSettings &settings, Bridge &bridge, QWi
             effort_button, updateEffortLabel);
     setLayout(main_layout);
 
-    connect(input_field, &QLineEdit::returnPressed, this, &SessionWidget::submitPrompt);
+    connect(input_field, &ChatInputField::returnPressed, this, &SessionWidget::submitPrompt);
 
 }
 
@@ -129,7 +133,7 @@ void SessionWidget::submitPrompt(){
     active_response = true;
     clearError();
 
-    const QString prompt = input_field->text();
+    const QString prompt = input_field->toPlainText();
     chat->appendPrompt(prompt);
 
     emit userPromptSent(id, prompt, settings.selectedModel(), settings.selectedEffort());
@@ -226,4 +230,59 @@ void SessionStack::routeRetry(Uuid id, const QString &content, std::chrono::stea
     if (SessionWidget* w = sessions.value(id, nullptr)){
         w->reportRetry(content, deadline);
     }
+}
+
+ChatInputField::ChatInputField(QWidget *parent) : QPlainTextEdit(parent) {
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
+    // documentSizeChanged signals that the bounds changed and this needs redraw
+    connect(document()->documentLayout(), 
+            &QAbstractTextDocumentLayout::documentSizeChanged,
+            this, &ChatInputField::adjustHeight);
+    // Do the initial sizing
+    adjustHeight();
+}
+int ChatInputField::currentHeight() const {
+    auto *doc = document();
+    auto *doc_layout = doc->documentLayout();
+    // Get the height of the internal text document (yes this is really how you have to do it)
+    qreal doc_h = 0;
+    for (auto b = doc->begin(); b.isValid(); b = b.next()){
+        doc_h += doc_layout->blockBoundingRect(b).height();
+    }
+    int margins = doc->documentMargin() +  2*frameWidth() + 
+                  contentsMargins().top() + contentsMargins().bottom();
+    return qCeil(doc_h) + margins;
+}
+
+QSize ChatInputField::sizeHint() const {
+    // Calculate the maximum height given max_lines from font metrics
+    int line_h = fontMetrics().lineSpacing();
+    int max_h = line_h * max_lines;
+    // Get the current height of the widget
+    int curr_h = currentHeight();
+    // Clamp between 1 and max lines
+    int height = qBound<int>(line_h, curr_h, max_h);
+    return QSize(-1, height);
+}
+
+void ChatInputField::adjustHeight(){
+    int curr = currentHeight();
+    int max_h = fontMetrics().lineSpacing() * max_lines;
+
+    auto scroll = (curr <= max_h) ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded;
+    setVerticalScrollBarPolicy(scroll);
+    updateGeometry();
+}
+
+void ChatInputField::keyPressEvent(QKeyEvent* event){
+    if ((event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) &&
+        !(event->modifiers() & Qt::ShiftModifier)) {
+        emit returnPressed();
+        return; // Prevent inserting a newline
+    }
+    // Pass through
+    QPlainTextEdit::keyPressEvent(event);
 }

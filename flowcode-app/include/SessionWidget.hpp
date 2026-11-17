@@ -4,6 +4,8 @@
 #include <QHash>
 #include <QStackedWidget>
 #include <QLineEdit>
+#include <QTextBlock>
+#include <QPlainTextEdit>
 #include <QScrollArea>
 #include <QVBoxLayout>
 
@@ -18,6 +20,23 @@
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 
+class ChatInputField : public QPlainTextEdit {
+    Q_OBJECT
+    public:
+        ChatInputField(QWidget *parent = nullptr);
+    protected:    
+        QSize sizeHint() const override;
+        QSize minimumSizeHint() const override { return sizeHint(); }
+        void keyPressEvent(QKeyEvent* event) override;
+    signals:
+        void returnPressed();
+    private slots:
+        int currentHeight() const;
+        void adjustHeight();
+    private:
+        static constexpr int max_lines = 8;
+};
+ 
 class SessionWidget : public QWidget {
     Q_OBJECT
     public:
@@ -49,7 +68,7 @@ class SessionWidget : public QWidget {
         QVBoxLayout *main_layout = nullptr;
         ErrorBlock *error_block = nullptr;
 
-        QLineEdit *input_field = nullptr;
+        ChatInputField *input_field = nullptr;
         QScrollArea *chat_area = nullptr;
 };
 
