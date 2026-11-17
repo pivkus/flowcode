@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <map>
+#include <vector>
 
 #include <QWidget>
 #include <QPointer>
@@ -42,6 +43,7 @@ class ReasoningBlock : public QWidget {
         static constexpr int text_gap = 10;
         static constexpr int corner_radius = 8;
 };
+
 
 
 class UserpromptBlock : public QWidget {
@@ -90,8 +92,6 @@ class ErrorBlock : public QWidget {
                 Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap;
 };
 
-// iterate all in block - name, store tcid (for start, finish), start/finish state, finish status
-// map tcid -> name, ordered map tcid -> opt<finish_state>
 class ToolInfoBlock : public QWidget {
     Q_OBJECT
     public:
@@ -103,18 +103,32 @@ class ToolInfoBlock : public QWidget {
         QSize sizeHint() const override;
     protected:
         void paintEvent(QPaintEvent *event) override;
+        void mouseMoveEvent(QMouseEvent *event) override;
+        void leaveEvent(QEvent *event) override;
+        void mousePressEvent(QMouseEvent *event) override;
     private:
-
+        bool hasSummary() const;
+        int rowHeight() const;
+        QRect summaryRect() const;
+        std::pair<QString, QString> summaryText() const;
+        void setSummaryHovered(bool hovered);
 
         enum class Status {
             IN_PROGRESS,
             SUCCEEDED,
             FAILED
         };
-        std::map<ToolCallId, Status> state;
-        std::map<ToolCallId, QString> named;
+        struct Tool {
+            ToolCallId id;
+            QString name;
+            Status status;
+        };
+        std::vector<Tool> tools;
         QSvgRenderer *tool_icon = nullptr;
+        bool expanded = false;
+        bool summary_hovered = false;
 
+        static constexpr int collapse_threshold = 3;
         static constexpr int horizontal_pad = 10;
         static constexpr int vertical_pad = 8;
         static constexpr int icon_gap = 5;
@@ -135,22 +149,24 @@ class ChatInterface : public QWidget {
 
         void finishTurn();
     private:
+        enum class State {
+            Passive,
+            Active
+        };
+
+        State state = State::Passive;
+
         template<class T, class... Args>
         T* addBlock(Args&&... args){
             auto *block = new T(std::forward<Args>(args)..., this);
             // Insert before the trailing stretch.
             feed_layout->insertWidget(feed_layout->count() - 1, block);
-            current_block = block;
             return block;
         }
 
-        template<class T>
-        T* ensureCurrentBlock(){
-            if (auto *block = qobject_cast<T*>(current_block.data())) return block;
-            return addBlock<T>();
-        }
-
         QVBoxLayout* feed_layout = nullptr;
-        QPointer<QWidget> current_block;
+        QPointer<ReasoningBlock> current_reasoning;
+        QPointer<ToolInfoBlock> current_tools;
+        QPointer<OutputTextBlock> current_output;
         std::map<ToolCallId, QPointer<ToolInfoBlock>> active_tools;
 };

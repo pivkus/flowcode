@@ -16,6 +16,7 @@
 #include <ChatInterface.hpp>
 #include <ModelPickerOverlay.hpp>
 #include <Bridge.hpp>
+#include <Theme.hpp>
 
 SessionWidget::SessionWidget(Uuid id, AppSettings &settings, Bridge &bridge, QWidget *parent)
  : QWidget(parent), id(id), settings(settings)
@@ -152,12 +153,12 @@ void SessionWidget::renderSession(const TurnVec& history){
                     if (block.kind == AssistantBlock::Kind::OUTPUT) chat->appendText(text);
                     else chat->appendReasoning(text);
                 }
-                chat->finishTurn();
             }, 
             [&](const ToolResultTurn& t){}, // TODO: tools
             [&](const SystemTurn& t){} 
         }, *turn);
     }
+    chat->finishTurn();
 }
 
 SessionStack::SessionStack(Bridge& bridge, AppSettings &settings, QWidget *parent)
@@ -233,6 +234,10 @@ void SessionStack::routeRetry(Uuid id, const QString &content, std::chrono::stea
 }
 
 ChatInputField::ChatInputField(QWidget *parent) : QPlainTextEdit(parent) {
+    auto input_palette = palette();
+    input_palette.setColor(QPalette::Base, theme.surface);
+    setPalette(input_palette);
+
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

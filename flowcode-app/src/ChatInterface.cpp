@@ -1,6 +1,7 @@
 
 #include <QLabel>
 #include <QLinearGradient>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QSizePolicy>
 #include <QSvgRenderer>
@@ -13,74 +14,135 @@ ToolInfoBlock::ToolInfoBlock(QWidget *parent) : QWidget(parent) {
     tool_icon = new QSvgRenderer(themedSvg(QStringLiteral(":/assets/terminal.svg"), theme.text), this);
     QSizePolicy policy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     setSizePolicy(policy);
+    setMouseTracking(true);
 }
 void ToolInfoBlock::start(const QString &name, ToolCallId tcid){
-    if (state.contains(tcid)) return; // Should not happen
 
-    state[tcid] = Status::IN_PROGRESS;
-    named[tcid] = name;
+
+    tools.push_back({tcid, name, Status::IN_PROGRESS});
+    if (tools.size() == collapse_threshold + 1 && underMouse()){
+        setSummaryHovered(summaryRect().contains(mapFromGlobal(QCursor::pos())));
+    }
     updateGeometry();
     update();
 }
 void ToolInfoBlock::finish(ToolCallId tcid, bool status){
-    if (!state.contains(tcid)) return;
-    state[tcid] = status ? Status::SUCCEEDED : Status::FAILED;
-    update();
+    for (auto &tool : tools){
+        if (tool.id != tcid) continue;
+        tool.status = status ? Status::SUCCEEDED : Status::FAILED;
+        update();
+        return;
+    }
 }
-QSize ToolInfoBlock::sizeHint() const {
+bool ToolInfoBlock::hasSummary() const {
+    return tools.size() > collapse_threshold;
+}
+int ToolInfoBlock::rowHeight() const {
     QFont prefix_font(font());
     prefix_font.setWeight(QFont::DemiBold);
+    return qMax(fontMetrics().height(), QFontMetrics(prefix_font).height())
+        + 2 * Sizing::vertical_pad;
+}
+QRect ToolInfoBlock::summaryRect() const {
+    return {Sizing::horizontal_pad, 0, width() - 2 * Sizing::horizontal_pad, rowHeight()};
+}
+std::pair<QString, QString> ToolInfoBlock::summaryText() const {
+    int running = 0;
+    int failed = 0;
+    for (const auto &tool : tools){
+        if (tool.status == Status::IN_PROGRESS) ++running;
+        if (tool.status == Status::FAILED) ++failed;
+    }
+    QString summary = QStringLiteral("%1 tools").arg(tools.size());
+    if (running > 0) summary += QStringLiteral(" · %1 running").arg(running);
+    if (failed > 0) summary += QStringLiteral(" · %1 failed").arg(failed);
+    return {running == 0 ? QStringLiteral("Used ") : QString(), summary};
+}
+void ToolInfoBlock::setSummaryHovered(bool hovered){
+    summary_hovered = hovered;
+    if (hovered) setCursor(Qt::PointingHandCursor);
+    else unsetCursor();
+    update(summaryRect());
+}
+void ToolInfoBlock::mouseMoveEvent(QMouseEvent *event){
+    setSummaryHovered(hasSummary() && summaryRect().contains(event->position().toPoint()));
+    QWidget::mouseMoveEvent(event);
+}
+void ToolInfoBlock::leaveEvent(QEvent *event){
+    setSummaryHovered(false);
+    QWidget::leaveEvent(event);
+}
+void ToolInfoBlock::mousePressEvent(QMouseEvent *event){
+    if (event->button() == Qt::LeftButton && hasSummary()
+        && summaryRect().contains(event->position().toPoint())){
+        expanded = !expanded;
+        updateGeometry();
+        update();
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
 
-    const int line_height = qMax(fontMetrics().height(), QFontMetrics(prefix_font).height());
-    int lines = line_height * static_cast<int>(state.size());
-    return {0, 2 * Sizing::vertical_pad + lines};
+QSize ToolInfoBlock::sizeHint() const {
+    int rows = static_cast<int>(tools.size());
+    if (hasSummary()) rows = expanded ? rows + 1 : 1;
+    return {0, rows * rowHeight()};
 }
 QSize ToolInfoBlock::minimumSizeHint() const {
     return {2 * Sizing::horizontal_pad + fontMetrics().maxWidth(),
-            2 * Sizing::vertical_pad   + fontMetrics().height()};
+            sizeHint().height()};
 }
 void ToolInfoBlock::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
 
-    const QRect text_rect = padded_rect(rect());
-    painter.setClipRect(text_rect);
+    const QRect rows_rect = rect().adjusted(Sizing::horizontal_pad, 0, -Sizing::horizontal_pad, 0);
+    painter.setClipRect(rows_rect);
 
     QFont prefix_font(font());
     prefix_font.setWeight(QFont::DemiBold);
     const QFontMetrics prefix_metrics(prefix_font);
 
-    const int line_height = qMax(fontMetrics().height(), prefix_metrics.height());
+    const int row_height = rowHeight();
     const int icon_size = prefix_metrics.height();
-    int y = text_rect.top();
-    for (const auto &[tcid, status] : state) {
-        const auto name = named.find(tcid);
-        if (name == named.end()) continue;
 
+    const auto drawText = [&](QRect area, const QString &prefix, const QString &detail){
+        const auto flags = Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine;
+        if (!prefix.isEmpty()){
+            const int prefix_width = prefix_metrics.horizontalAdvance(prefix);
+            painter.setFont(prefix_font);
+            painter.setPen(theme.text);
+            painter.drawText(QRect(area.topLeft(), QSize(prefix_width, area.height())), flags, prefix);
+            area.adjust(prefix_width, 0, 0, 0);
+        }
+        if (area.width() <= 0) return;
+        painter.setFont(font());
+        painter.setPen(theme.text_secondary);
+        painter.drawText(area, flags, detail);
+    };
+
+    int y = rows_rect.top();
+    if (hasSummary()){
+        const QRect header = summaryRect();
+        if (summary_hovered) paintBackground(painter, header, theme.hover);
+        const auto [prefix, detail] = summaryText();
+        drawText(header.adjusted(icon_gap, 0, -icon_gap, 0), prefix, detail);
+        if (!expanded) return;
+        y += row_height;
+    }
+    for (const auto &tool : tools) {
         QString prefix;
-        switch (status) {
+        switch (tool.status) {
             case Status::IN_PROGRESS: prefix = QStringLiteral("Using "); break;
             case Status::SUCCEEDED:   prefix = QStringLiteral("Used "); break;
             case Status::FAILED:      prefix = QStringLiteral("Failed "); break;
         }
-        const int prefix_width = prefix_metrics.horizontalAdvance(prefix);
-        tool_icon->render(&painter, QRectF(text_rect.left(),
-                                          y + (line_height - icon_size) / 2.0,
+        tool_icon->render(&painter, QRectF(rows_rect.left(),
+                                          y + (row_height - icon_size) / 2.0,
                                           icon_size, icon_size));
-        const int prefix_x = text_rect.left() + icon_size + icon_gap;
-
-        painter.setFont(prefix_font);
-        painter.setPen(theme.text);
-        painter.drawText(QRect(prefix_x, y, prefix_width, line_height),
-                         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine, prefix);
-
-        painter.setFont(font());
-        painter.setPen(theme.text_secondary);
-        const int name_x = prefix_x + prefix_width;
-        painter.drawText(QRect(name_x, y,
-                               qMax(0, text_rect.right() - name_x + 1), line_height),
-                         Qt::AlignLeft | Qt::AlignVCenter | Qt::TextSingleLine,
-                         name->second);
-        y += line_height;
+        const QRect row(rows_rect.left(), y, rows_rect.width(), row_height);
+        drawText(row.adjusted(icon_size + icon_gap, 0, 0, 0), prefix, tool.name);
+        y += row_height;
     }
 }
 
@@ -141,7 +203,8 @@ void ErrorBlock::paintEvent(QPaintEvent *event){
     painter.drawText(text_rect, text_flags, displayText());
 }
 
-
+// Known bug: QLabel interprets html-like text automatically, when a model emits
+// <img src=""> for example it tries to open it
 UserpromptBlock::UserpromptBlock(const QString &prompt, QWidget *parent)
 : QWidget(parent), prompt_text(prompt)
 {
@@ -281,24 +344,45 @@ ChatInterface::ChatInterface(QWidget *parent)
 }
 
 void ChatInterface::appendText(const QString &text){
-    if (text.isEmpty()) return;
-    ensureCurrentBlock<OutputTextBlock>()->append(text);
+    if (state != State::Active || text.isEmpty()) return;
+    current_reasoning.clear();
+    current_tools.clear();
+
+    if (!current_output) current_output = addBlock<OutputTextBlock>();
+    current_output->append(text);
 }
 
 void ChatInterface::appendReasoning(const QString &text){
-    if (text.isEmpty()) return;
-    ensureCurrentBlock<ReasoningBlock>()->append(text);
+    if (state != State::Active || text.isEmpty()) return;
+    current_output.clear();
+
+    if (!current_reasoning){
+        current_reasoning = addBlock<ReasoningBlock>();
+        if (current_tools){
+            // Reasoning stays above tools even when the first event was a tool.
+            feed_layout->removeWidget(current_reasoning);
+            feed_layout->insertWidget(feed_layout->indexOf(current_tools), current_reasoning);
+        }
+    }
+    current_reasoning->append(text);
 }
 
 void ChatInterface::appendPrompt(const QString &prompt){
+    current_reasoning.clear();
+    current_tools.clear();
+    current_output.clear();
+
     addBlock<UserpromptBlock>(prompt);
+    state = State::Active;
 }
 
 void ChatInterface::appendToolStarted(const QString &name, ToolCallId tcid){
-    auto* block = ensureCurrentBlock<ToolInfoBlock>();
-
-    block->start(name, tcid);
-    active_tools.emplace(tcid, block);
+    if (state != State::Active || active_tools.contains(tcid)) return;
+    current_output.clear();
+    
+    if (!current_tools) current_tools = addBlock<ToolInfoBlock>();
+    current_tools->start(name, tcid);
+    active_tools.emplace(tcid, current_tools);
 }
 
 void ChatInterface::appendToolFinished(ToolCallId tcid, bool status){
@@ -314,5 +398,8 @@ void ChatInterface::appendToolFinished(ToolCallId tcid, bool status){
 }
 
 void ChatInterface::finishTurn(){
-    current_block.clear();
+    current_reasoning.clear();
+    current_tools.clear();
+    current_output.clear();
+    state = State::Passive;
 }
