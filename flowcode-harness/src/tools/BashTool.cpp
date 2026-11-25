@@ -98,7 +98,8 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
 
     // Fork ourselfs so when can call setsid - create a new process group - before exec
     // This allows us to kill any child processes bash will spawn (same pgid)
-    auto [in_child, f_ec] = process.fork(reproc::options{ 
+    auto [in_child, f_ec] = process.fork(reproc::options{
+        .redirect = { .err = { .type = reproc::redirect::pipe } }, 
         .deadline = reproc::milliseconds(timeout_sec * 1000)
     });
     if (f_ec){
@@ -116,7 +117,6 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
 
     auto [pid, p_ec] = process.pid();
     assert(!p_ec); // this cannot fail after fork retunrns
-
 
     // kill processes by pid/pgid is safe until wait() returns and reaps them
     // after that they might be recycled by OS and are not safe to kill(), guard with "safe_kill"
