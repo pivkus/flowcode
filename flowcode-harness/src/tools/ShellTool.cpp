@@ -1,20 +1,35 @@
-#include "tools/BashTool.hpp"
+#include "tools/ShellTool.hpp"
 
+#ifndef _WIN32
 #include <unistd.h>
 #include <csignal>
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 
 // reproc++ library for executing commands
 #include <reproc++/reproc.hpp>
 #include <reproc++/drain.hpp>
 
 namespace {
-    constexpr int bash_default_timeout = 120;
-    constexpr int bash_max_timeout =  600;
-    constexpr int bash_max_output_chars =  30000;
-    constexpr std::string_view bash_truncation_msg = "TOOL SYSTEM WARNING: command output was truncated!";
-    
+    constexpr int shell_default_timeout = 120;
+    constexpr int shell_max_timeout = 600;
+    constexpr int shell_max_output_chars = 30000;
+    constexpr std::string_view shell_truncation_msg = "TOOL SYSTEM WARNING: command output was truncated!";
+
+    std::string posix_shell_name() {
+#ifdef __APPLE__
+        // macOS /bin/sh delegates to the selected shell.
+        constexpr auto path = "/private/var/select/sh";
+        constexpr auto fallback = "bash";
+#else
+        constexpr auto path = "/bin/sh";
+        constexpr auto fallback = "sh";
+#endif
+        std::error_code ec;
+        const auto resolved = std::filesystem::canonical(path, ec);
+        return ec ? fallback : resolved.filename().string();
+    }
 }
 
 class CappedStringSink {
@@ -45,15 +60,20 @@ static inline std::string error_str(std::error_code ec){
         return "ERROR: Internal error in tool - " + ec.message();
     }
 }
+#endif
 
-ToolSchema BashTool::schema() const {
+ToolSchema ShellTool::schema() const {
     return ToolSchema {
-        .name = "bash",
-        .description = "Execute a bash command and return its output.",
+        .name = "shell",
+#ifdef _WIN32
+        .description = "The shell tool targets PowerShell.",
+#else
+        .description = "Execute a shell command through /bin/sh (" + posix_shell_name() + ") and return its output.",
+#endif
         .params = {
             ToolParam {
                 .name = "command",
-                .description = "The bash command to execute.",
+                .description = "The shell command to execute.",
                 .type = ToolParamType::String,
                 .required = true
             },
@@ -68,7 +88,20 @@ ToolSchema BashTool::schema() const {
 }
 
 
-ToolResult BashTool::execute(const json& args, std::stop_token stop) {
+ToolResult ShellTool::execute(const json& args, std::stop_token stop) {
+#ifdef _WIN32
+    return WindowsExecute(args, stop);
+#else
+    return PosixExecute(args, stop);
+#endif
+}
+
+#ifdef _WIN32
+ToolResult ShellTool::WindowsExecute(const json&, std::stop_token) {
+    return { .ok = false, .content = "ERROR: Shell execution is currently unavailable on Windows." };
+}
+#else
+ToolResult ShellTool::PosixExecute(const json& args, std::stop_token stop) {
 
     ToolResult result = { .ok = true, .content = "" };
     // Here the args should already be validated against tool schema
@@ -76,19 +109,19 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     json cmd_obj = args.at("command");
     std::string& cmd = cmd_obj.get_ref<std::string&>();
 
-    int timeout_sec = bash_default_timeout;
+    int timeout_sec = shell_default_timeout;
     if (args.contains("timeout")){
         int provided_timeout = args.at("timeout").get<int>();
         if (provided_timeout > 0){
-            timeout_sec = provided_timeout < bash_max_timeout ? provided_timeout : bash_max_timeout;
+            timeout_sec = provided_timeout < shell_max_timeout ? provided_timeout : shell_max_timeout;
         }
     }
 
     reproc::process process;
 
-    // Include "-c" flag so that bash executes the unsplit command from the string
+    // Include "-c" so the shell executes the command string as a single argument
     std::vector<char*> sh_args = {
-        const_cast<char*>("/bin/sh"), 
+        const_cast<char*>("/bin/sh"),
         const_cast<char*>("-c"),
         cmd.data()
     };
@@ -97,9 +130,9 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     sh_args.push_back(nullptr);
 
     // Fork ourselfs so when can call setsid - create a new process group - before exec
-    // This allows us to kill any child processes bash will spawn (same pgid)
+    // This allows us to kill any child processes the shell spawns (same pgid)
     auto [in_child, f_ec] = process.fork(reproc::options{
-        .redirect = { .err = { .type = reproc::redirect::pipe } }, 
+        .redirect = { .err = { .type = reproc::redirect::pipe } },
         .deadline = reproc::milliseconds(timeout_sec * 1000)
     });
     if (f_ec){
@@ -124,7 +157,7 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
 
     std::stop_callback on_stop(stop, [pid, &safe_kill]{
         if (safe_kill.load(std::memory_order_acquire)){
-            // -pid to kill the group - all the processes bash spawned
+            // -pid to kill the group, including the processes the shell spawned
             ::kill(-pid, SIGKILL);
             // TODO: right now we straight up kills (instead of terminate-wait-kill) because its easier
             //       its not a big deal - investigate if its worth doing properly
@@ -133,11 +166,11 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
 
     std::string stdout_str;
     std::string stderr_str;
-    
+
     bool out_trunc = false;
-    CappedStringSink out_sink(stdout_str, bash_max_output_chars, out_trunc);
+    CappedStringSink out_sink(stdout_str, shell_max_output_chars, out_trunc);
     bool err_trunc = false;
-    CappedStringSink err_sink(stderr_str, bash_max_output_chars, err_trunc);
+    CappedStringSink err_sink(stderr_str, shell_max_output_chars, err_trunc);
 
     // Collect output and error streams into strings, will block until streams return EOF
     auto d_ec = reproc::drain(process, out_sink, err_sink);
@@ -162,9 +195,9 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     // Any failure path will populate the result object
     if (!result.ok) return result;
 
-    if (out_trunc) stdout_str.append(bash_truncation_msg);
-    if (err_trunc) stderr_str.append(bash_truncation_msg);
-    
+    if (out_trunc) stdout_str.append(shell_truncation_msg);
+    if (err_trunc) stderr_str.append(shell_truncation_msg);
+
     json json_response;
     json_response["exit code"] = exit_code;
     if (out_trunc || err_trunc) json_response["truncated"] = true;
@@ -177,3 +210,4 @@ ToolResult BashTool::execute(const json& args, std::stop_token stop) {
     return result;
 
 }
+#endif

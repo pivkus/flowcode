@@ -9,7 +9,7 @@
 #include <Log.hpp>
 
 // TODO: is there an easier way to include all of them?
-#include <tools/BashTool.hpp>
+#include <tools/ShellTool.hpp>
 
 
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
@@ -45,7 +45,7 @@ Harness::Impl::Impl(std::string system_prompt, const HarnessConfig& config)
 
     // Register built-in tools in the global tool registry
     // TODO: factor this out into a function
-    tool_registry.add(std::make_unique<BashTool>());
+    tool_registry.add(std::make_unique<ShellTool>());
 
     coordinator_thread = std::jthread([this](std::stop_token stop){ coordinatorWorker(stop); });
 }
@@ -86,7 +86,7 @@ void Harness::Impl::executeEffects(Effects&& effects){
 void Harness::Impl::coordinatorWorker(std::stop_token stop){
 
     SchemaMap tool_map;
-    tool_map["bash"] = tool_registry.get_schema("bash");
+    tool_map["shell"] = tool_registry.get_schema("shell");
     SchemaMapPtr allowed_tools = std::make_shared<const SchemaMap>(std::move(tool_map));
 
     std::unordered_map<Uuid, Session> sessions;

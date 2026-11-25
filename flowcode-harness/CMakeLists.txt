@@ -3,7 +3,7 @@ add_library(flowcode-harness STATIC
     src/FlowcodeHarness.cpp
     src/IoWorker.cpp
     src/Tools.cpp
-    src/tools/BashTool.cpp
+    src/tools/ShellTool.cpp
     src/Session.cpp
     src/NetworkWorker.cpp
     src/ResponseHandlers.cpp
