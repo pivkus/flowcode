@@ -1,0 +1,29 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "harness",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_APP": false
+      }
+    },
+    {
+      "name": "app",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_APP": true
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "harness",
+      "configurePreset": "harness"
+    },
+    {
+      "name": "app",
+      "configurePreset": "app"
+    }
+  ]
+}

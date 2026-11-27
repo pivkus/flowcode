@@ -277,9 +277,9 @@ TurnPtr IoWorker::tryParseLine(std::string& line){
 
         turn = ToolResultTurn {
             .tid = t_it->get<uint64_t>(),
-            .content = ou_it->get<std::string>(),
             .tool_call_id = tc_it->get<std::string>(),
-            .ok = ok_it->get<bool>()
+            .ok = ok_it->get<bool>(),
+            .content = ou_it->get<std::string>()
         };
 
     }

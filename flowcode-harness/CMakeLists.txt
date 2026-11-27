@@ -7,7 +7,6 @@ add_library(flowcode-harness STATIC
     src/Session.cpp
     src/NetworkWorker.cpp
     src/ResponseHandlers.cpp
-
     src/ExecutorWorker.cpp
 )
 

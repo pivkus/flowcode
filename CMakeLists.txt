@@ -7,4 +7,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(flowcode-harness)
-add_subdirectory(flowcode-app)
+
+option(BUILD_APP "Build the app frontend" ON)
+if(BUILD_APP)
+  add_subdirectory(flowcode-app)
+endif()

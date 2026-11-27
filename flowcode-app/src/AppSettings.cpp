@@ -10,6 +10,7 @@ QString AppSettings::openrouterKey() const {
     return settings.value("openrouter/key").toString();
 }
 
+
 QString AppSettings::selectedEffort() const {
     return settings.value("model/effort").toString();
 }
